@@ -1,5 +1,6 @@
 #region Welcome splash
 
+Write-Host ""
 Write-Host "                   ___                  _            _           "
 Write-Host "                  | _ )_ _ ___  __ _ __| |__ __ _ __| |_ ___ _ _ "
 Write-Host "      |\ |\       | _ \ '_/ _ \/ _`` / _`` / _/ _`` (_-<  _/ -_) '_|"
