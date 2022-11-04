@@ -1,5 +1,3 @@
-# This script is deployed via a GitHub Gist: https://gist.github.com/erikvk/cc339289b1a14b2e531e3e891a5c317c
-
 Write-Warning "The Broadcaster manager is under construction!"
 
 #region Welcome splash
