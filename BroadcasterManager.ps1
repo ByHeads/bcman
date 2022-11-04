@@ -1,5 +1,3 @@
-Write-Warning "The Broadcaster manager is under construction!"
-
 #region Welcome splash
 
 Write-Host "                   ___                  _            _           "
