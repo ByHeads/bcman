@@ -54,29 +54,25 @@ while (!$credentials) {
     Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
 }
 
-$settings = @{
-    Credential = $credentials
-    TimeoutSec = 5
-    Headers = @{ Accept = "application/json;raw=true" }
-}
-
 Write-Host "Connection established!"
 
 #endregion
+
+$s = @{ Credential = $credentials; TimeoutSec = 5; Headers = @{ Accept = "application/json;raw=true" } }
 
 $commands = @(
 @{
     Command = "Status"
     Description = "Prints the current status for all Receivers"
     Action = {
-        irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @settings | Out-Host
+        irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @s | Out-Host
     }
 }
 @{
     Command = "Config"
     Description = "Prints the configuration of the Broadcaster"
     Action = {
-        irm "$bc/Config" @settings | Out-Host
+        irm "$bc/Config" @s | Out-Host
     }
 }
 @{
@@ -86,11 +82,11 @@ $commands = @(
         $message = "Enter workstation ID or 'list' for a list of workstation IDs to choose from"
         $input = Read-Host $message
         while ($input -ieq "list") {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @settings | Out-Host
+            irm "$bc/ReceiverLog/_/select=WorkstationId" @s | Out-Host
             $input = Read-Host $message
         }
         $formattedOption = $input.Trim();
-        $response = irm "$bc/ReceiverLog/WorkstationId=$formattedOption/select=Modules" @settings | Select-Object -first 1
+        $response = irm "$bc/ReceiverLog/WorkstationId=$formattedOption/select=Modules" @s | Select-Object -first 1
         Write-Host ""
         $response.Modules.PSObject.Properties | ForEach-Object {
             Write-Host ($_.Name + ":") -ForegroundColor Yellow
@@ -113,7 +109,7 @@ $commands = @(
                 default { Write-Host "Unrecognized software product name $input"; break }
             }
         }
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @settings
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @s
         $items = @()
         foreach ($r in $response) {
             $item = [pscustomobject]@{
@@ -134,7 +130,7 @@ $commands = @(
     Command = "ReplicationInfo"
     Description = "Prints details about a the replication status of Receivers"
     Action = {
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @settings
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @s
         $items = @()
         foreach ($r in $response) {
             $item = [pscustomobject]@{
