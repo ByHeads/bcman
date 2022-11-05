@@ -84,12 +84,12 @@ $commands = @(
     Description = "Prints details about a specific Receiver"
     Action = {
         $message = "Enter workstation ID or 'list' for a list of workstation IDs to choose from"
-        $option = Read-Host $message
-        while ($option -ieq "list") {
+        $input = Read-Host $message
+        while ($input -ieq "list") {
             irm "$bc/ReceiverLog/_/select=WorkstationId" @settings | Out-Host
-            $option = Read-Host $message
+            $input = Read-Host $message
         }
-        $formattedOption = $option.Trim();
+        $formattedOption = $input.Trim();
         $response = irm "$bc/ReceiverLog/WorkstationId=$formattedOption/select=Modules" @settings | Select-Object -first 1
         Write-Host ""
         $response.Modules.PSObject.Properties | ForEach-Object {
@@ -97,6 +97,55 @@ $commands = @(
             @($_.Value) | Out-Host
         }
         Write-Host ""
+    }
+}
+@{
+    Command = "VersionInfo"
+    Description = "Prints details about a the installed software on Receivers"
+    Action = {
+        $softwareProduct = $null
+        while (!$softwareProduct) {
+            $input = Read-Host "Enter software product name: WpfClient, PosServer or Receiver"
+            switch ( $input.Trim().ToLower()) {
+                "receiver" { $softwareProduct = "Receiver"; break }
+                "wpfclient" { $softwareProduct = "WpfClient"; break }
+                "posserver" { $softwareProduct = "PosServer"; break }
+                default { Write-Host "Unrecognized software product name $input"; break }
+            }
+        }
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @settings
+        $items = @()
+        foreach ($r in $response) {
+            $item = [pscustomobject]@{
+                WorkstationId = $r.WorkstationId
+                LastActive = $r.LastActive
+                IsInstalled = $r.Product.IsInstalled
+                IsRunning = $r.Product.IsRunning
+                CurrentVersion = $r.Product.CurrentVersion
+                DeployedVersions = $r.Product.DeployedVersions
+                LaunchedVersion = $r.Product.LaunchedVersion
+            }
+            $items += $item
+        }
+        @($items) | Format-Table | Out-Host
+    }
+}
+@{
+    Command = "ReplicationInfo"
+    Description = "Prints details about a the replication status of Receivers"
+    Action = {
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @settings
+        $items = @()
+        foreach ($r in $response) {
+            $item = [pscustomobject]@{
+                WorkstationId = $r.WorkstationId
+                LastActive = $r.LastActive
+                ReplicationVersion = $r.Replication.ReplicationVersion
+                AwaitsInitialization = $r.Replication.AwaitsInitialization
+            }
+            $items += $item
+        }
+        @($items) | Format-Table | Out-Host
     }
 }
 @{
