@@ -17,102 +17,291 @@ Write-Host ""
 #endregion
 #region Setup Broadcaster connection
 
-$bc = $null
-while (!$bc) {
-    $a = Read-Host "> Enter the URL to the Broadcaster"
-    $a = $a.Trim();
+function Get-BroadcasterUrl
+{
+    $url = Read-Host "> Enter the URL to the Broadcaster"
+    $url = $url.Trim();
+    if (!$url.StartsWith("https://")) {
+        $url = "https://" + $url
+    }
+    if (!$url.EndsWith("/api")) {
+        $url += "/api"
+    }
     $r = $null
-    if (!$a.StartsWith("https://")) {
-        $a = "https://" + $a
-    }
-    if (!$a.EndsWith("/api")) {
-        $a += "/api"
-    }
-    if (![System.Uri]::TryCreate($a, 'Absolute', [ref]$r)) {
+    if (![System.Uri]::TryCreate($url, 'Absolute', [ref]$r)) {
         Write-Host "Invalid URI format. Try again."
-        continue
+        return Get-BroadcasterUrl
     }
     try {
-        $options = irm $a -Method "OPTIONS" -TimeoutSec 5
+        $options = irm $url -Method "OPTIONS" -TimeoutSec 5
         if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
-            $bc = $a
-            break
+            return $url
         }
     }
     catch { }
-    Write-Host "Found no Broadcaster API responding at $a. Ensure that the URL was input correctly and that the Broadcaster is running"
-}
-$credentials = $null
-while (!$credentials) {
-    $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
-    $cred = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
-    $result = irm "$bc/RESTable.Blank" -Credential $cred -TimeoutSec 5
-    if (($result.Status -eq "success")) {
-        $credentials = $cred
-        break
-    }
-    Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
+    Write-Host "Found no Broadcaster API responding at $url. Ensure that the URL was input correctly and that the Broadcaster is running"
+    return Get-BroadcasterUrl
 }
 
+function Get-Credentials
+{
+    $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
+    $credentials = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
+    try {
+        $result = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5
+        if (($result.Status -eq "success")) {
+            return $credentials
+        }
+    }
+    catch { }
+    Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
+    return Get-Credentials
+}
+
+$bc = Get-BroadcasterUrl
+$credentials = Get-Credentials
 Write-Host "Connection established!"
 
-#endregion
+$getSettings = @{
+    Method = "GET"
+    Credential = $credentials
+    Headers = @{ Accept = "application/json;raw=true" }
+}
 
-$s = @{ Credential = $credentials; TimeoutSec = 5; Headers = @{ Accept = "application/json;raw=true" } }
+$patchSettings = @{
+    Method = "PATCH"
+    Credential = $credentials
+    Headers = @{ "Content-Type" = "application/json" }
+}
+
+#endregion 
+#region Lib
+
+function Enter-Terminal
+{
+    param($terminal)
+    $sendQueue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[String]'
+    $ws = New-Object Net.WebSockets.ClientWebSocket
+    $ws.Options.Credentials = $credentials
+    $cts = New-Object Threading.CancellationTokenSource
+    $ct = New-Object Threading.CancellationToken($false)
+    $baseUrl = $bc.Split("://")[1]
+    $connectTask = $ws.ConnectAsync("wss://$baseUrl/$terminal", $cts.Token)
+    do { Sleep(1) }
+    until ($connectTask.IsCompleted)
+    if ($ws.State -ne [Net.WebSockets.WebSocketState]::Open) {
+        Write-Host "Connection failed!"
+        return
+    }
+    $receiveJob = {
+        param($ws, [scriptblock]$outputRedirect)
+        $buffer = [Net.WebSockets.WebSocket]::CreateClientBuffer(1024, 1024)
+        $ct = [Threading.CancellationToken]::new($false)
+        $receiveTask = $null
+        while ($ws.State -eq [Net.WebSockets.WebSocketState]::Open) {
+            $result = ""
+            do {
+                $receiveTask = $ws.ReceiveAsync($buffer, $ct)
+                while ((-not$receiveTask.IsCompleted) -and ($ws.State -eq [Net.WebSockets.WebSocketState]::Open)) {
+                    [Threading.Thread]::Sleep(10)
+                }
+                $result += [Text.Encoding]::UTF8.GetString($buffer, 0, $receiveTask.Result.Count)
+            } until (($ws.State -ne [Net.WebSockets.WebSocketState]::Open) -or ($receiveTask.Result.EndOfMessage))
+            & $outputRedirect.Invoke($result)
+        }
+    }
+    $sendJob = {
+        param($ws, $sendQueue)
+        $ct = New-Object Threading.CancellationToken($false)
+        $workitem = $null
+        while ($ws.State -eq [Net.WebSockets.WebSocketState]::Open) {
+            if ( $sendQueue.TryDequeue([ref]$workitem)) {
+                [ArraySegment[byte]]$msg = [Text.Encoding]::UTF8.GetBytes($workitem)
+                $ws.SendAsync($msg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $ct).GetAwaiter().GetResult() | Out-Null
+            }
+        }
+    }
+    $receiver = [PowerShell]::Create()
+    $outputRedirect = [scriptblock]{ param($res); $res | Out-Host }
+    $receiver.AddScript($receiveJob).AddParameter("ws", $ws).AddParameter("outputRedirect", $outputRedirect).BeginInvoke() | Out-Null
+    $sender = [PowerShell]::Create()
+    $sender.AddScript($sendJob).AddParameter("ws", $ws).AddParameter("sendQueue", $sendQueue).BeginInvoke() | Out-Null
+    try {
+        do {
+            $input = Read-Host
+            if ($input -ieq "exit") {
+                return;
+            }
+            $sendQueue.Enqueue($input)
+        } until ($ws.State -ne [Net.WebSockets.WebSocketState]::Open)
+    }
+    finally {
+        $closetask = $ws.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::Empty, "", $ct)
+        do { Sleep(1) }
+        until ($closetask.IsCompleted)
+        $ws.Dispose()
+        $receiver.Stop()
+        $receiver.Dispose()
+        $sender.Stop()
+        $sender.Dispose()
+        Write-Host "Returning to Broadcaster Manager" -ForegroundColor Yellow
+    }
+}
+
+function Get-Terminal
+{
+    $input = Read-Host "> Enter the name of the terminal, or 'list' to list all terminals"
+    if ($input -ieq "list") {
+        irm "$bc/AvailableResource/Kind=TerminalResource/select=Name" @getSettings | Out-Host
+        return Get-Terminal
+    }
+    $input = $input.Trim();
+    if ($input -eq "") {
+        Write-Host "Invalid terminal name"
+        return Get-WorkstationId
+    }
+    return $input
+}
+
+function Get-SoftwareProduct
+{
+    $input = Read-Host "> Enter software product name: WpfClient, PosServer or Receiver"
+    switch ( $input.Trim().ToLower()) {
+        "receiver" { return "Receiver" }
+        "wpfclient" { return "WpfClient" }
+        "posserver" { return "PosServer" }
+        default {
+            Write-Host "Unrecognized software product name $input"
+            return Get-SoftwareProduct
+        }
+    }
+}
+
+function Get-WorkstationId
+{
+    $input = Read-Host "> Enter workstation ID or 'list' for a list of workstation IDs to choose from"
+    if ($input -ieq "list") {
+        irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
+        return Get-WorkstationId
+    }
+    $input = $input.Trim();
+    if ($input -eq "") {
+        Write-Host "Invalid workstation ID format"
+        return Get-WorkstationId
+    }
+    return $input
+}
+
+function Get-SoftwareProductVersion
+{
+    param($softwareProduct)
+    $message = "> Enter $softwareProduct version to deploy, 'list' for deployable versions of $softwareProduct or 'cancel' to cancel"
+    $input = Read-Host $message
+    if ($input -ieq "list") {
+        Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
+        $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
+        Write-Host ""
+        foreach ($v in $versions) {
+            Write-Host $v.Version
+        }
+        Write-Host ""
+        return Get-SoftwareProductVersion $softwareProduct
+    }
+    if ($input -ieq "cancel") {
+        return $null
+    }
+    $r = $null
+    if (![System.Version]::TryParse($input, [ref]$r)) {
+        Write-Host "Invalid version format. Try again."
+        return Get-SoftwareProductVersion $softwareProduct
+    }
+    return $r
+}
+
+#endregion
 
 $commands = @(
 @{
     Command = "Status"
     Description = "Prints the current status for all Receivers"
     Action = {
-        irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @s | Out-Host
+        irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings | Out-Host
     }
 }
 @{
     Command = "Config"
     Description = "Prints the configuration of the Broadcaster"
     Action = {
-        irm "$bc/Config" @s | Out-Host
+        irm "$bc/Config" @getSettings | Out-Host
+    }
+}
+
+@{
+    Command = "Launch"
+    Description = "Enters the Broadcaster LaunchCommands terminal"
+    Action = {
+        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
+        Enter-Terminal "LaunchCommands"
+        Get-Commands
     }
 }
 @{
-    Command = "Details"
-    Description = "Prints details about a specific Receiver"
+    Command = "Shell"
+    Description = "Enters the Broadcaster shell terminal"
     Action = {
-        $message = "Enter workstation ID or 'list' for a list of workstation IDs to choose from"
-        $input = Read-Host $message
-        while ($input -ieq "list") {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @s | Out-Host
-            $input = Read-Host $message
+        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
+        Enter-Terminal "Shell"
+        Get-Commands
+    }
+}
+@{
+    Command = "Terminal"
+    Description = "Enters a Broadcaster terminal"
+    Action = {
+        $terminal = Get-Terminal
+        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
+        Enter-Terminal $terminal
+        Get-Commands
+    }
+}
+@{
+    Command = "Deploy"
+    Description = "Lists and downloads deployable software versions to the Broadcaster"
+    Action = {
+        $softwareProduct = Get-SoftwareProduct
+        $version = Get-SoftwareProductVersion $softwareProduct
+        if ($version) {
+            $body = @{ Deploy = $true } | ConvertTo-Json
+            $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
+            $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
+            Write-Host "$softwareProduct $version is now downloading to the Broadcaster. Be patient..."
+            $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
+            if ($result.Status -eq "success") {
+                Write-Host "$softwareProduct $version was successfully deployed"
+            }
+            else {
+                Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
+                Write-Host $result
+            }
         }
-        $formattedOption = $input.Trim();
-        $response = irm "$bc/ReceiverLog/WorkstationId=$formattedOption/select=Modules" @s | Select-Object -first 1
-        Write-Host ""
-        $response.Modules.PSObject.Properties | ForEach-Object {
-            Write-Host ($_.Name + ":") -ForegroundColor Yellow
-            @($_.Value) | Out-Host
-        }
-        Write-Host ""
+    }
+}
+@{
+    Command = "DeploymentInfo"
+    Description = "Prints details about deployed software versions on the Broadcaster"
+    Action = {
+        irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings | Out-Host
     }
 }
 @{
     Command = "VersionInfo"
     Description = "Prints details about a the installed software on Receivers"
     Action = {
-        $softwareProduct = $null
-        while (!$softwareProduct) {
-            $input = Read-Host "Enter software product name: WpfClient, PosServer or Receiver"
-            switch ( $input.Trim().ToLower()) {
-                "receiver" { $softwareProduct = "Receiver"; break }
-                "wpfclient" { $softwareProduct = "WpfClient"; break }
-                "posserver" { $softwareProduct = "PosServer"; break }
-                default { Write-Host "Unrecognized software product name $input"; break }
-            }
-        }
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @s
+        $softwareProduct = Get-SoftwareProduct
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
         $items = @()
         foreach ($r in $response) {
-            $item = [pscustomobject]@{
+            $items += [pscustomobject]@{
                 WorkstationId = $r.WorkstationId
                 LastActive = $r.LastActive
                 IsInstalled = $r.Product.IsInstalled
@@ -121,35 +310,49 @@ $commands = @(
                 DeployedVersions = $r.Product.DeployedVersions
                 LaunchedVersion = $r.Product.LaunchedVersion
             }
-            $items += $item
         }
-        @($items) | Format-Table | Out-Host
+        $items | Format-Table | Out-Host
     }
 }
 @{
     Command = "ReplicationInfo"
     Description = "Prints details about a the replication status of Receivers"
     Action = {
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @s
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
         $items = @()
         foreach ($r in $response) {
-            $item = [pscustomobject]@{
+            $items += [pscustomobject]@{
                 WorkstationId = $r.WorkstationId
                 LastActive = $r.LastActive
                 ReplicationVersion = $r.Replication.ReplicationVersion
                 AwaitsInitialization = $r.Replication.AwaitsInitialization
             }
-            $items += $item
         }
-        @($items) | Format-Table | Out-Host
+        $items | Format-Table | Out-Host
     }
 }
 @{
-    Command = "Exit"
-    Description = "Closes the Broadcaster Manager"
+    Command = "Details"
+    Description = "Prints details about a specific Receiver"
     Action = {
-        Write-Host "> Exiting..."
-        Exit
+        function Details
+        {
+            $workstationId = Get-WorkstationId
+            $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
+            if (!$response) {
+                Write-Host "Found no Receiver with workstation ID $workstationId"
+                return Details
+            }
+            else {
+                Write-Host ""
+                $response.Modules.PSObject.Properties | ForEach-Object {
+                    Write-Host ($_.Name + ":") -ForegroundColor Yellow
+                    $_.Value | Out-Host
+                }
+                Write-Host ""
+            }
+        }
+        Details
     }
 }
 )
@@ -159,12 +362,14 @@ $commands = @(
 function Get-Commands
 {
     $list = @()
-    foreach ($c in $commands) {
+    foreach ($c in $commands | Sort-Object -Property Command) {
         $list += [pscustomobject]@{
             Command = $c.Command + "    "
             Description = $c.Description
         }
     }
+    $list += [pscustomobject]@{ }
+    $list += [pscustomobject]@{ Command = "Exit"; Description = "Closes the Broadcaster Manager" }
     $list | Format-Table | Out-Host
 }
 
@@ -173,6 +378,10 @@ Get-Commands
 while ($true) {
     $input = Read-Host "> Enter a command"
     $command = $input.Trim().ToLower()
+    if ($command -ieq "exit") {
+        Write-Host "> Exiting..."
+        Exit;
+    }
     $foundCommand = $false;
     foreach ($c in $commands) {
         if ($c.Command -ieq $command) {
