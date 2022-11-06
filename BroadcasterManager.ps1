@@ -80,6 +80,7 @@ $patchSettings = @{
 function Enter-Terminal
 {
     param($terminal)
+    Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
     $sendQueue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[String]'
     $ws = New-Object Net.WebSockets.ClientWebSocket
     $ws.Options.Credentials = $credentials
@@ -240,7 +241,6 @@ $commands = @(
     Command = "Launch"
     Description = "Enters the Broadcaster LaunchCommands terminal"
     Action = {
-        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
         Enter-Terminal "LaunchCommands"
         Get-Commands
     }
@@ -249,7 +249,6 @@ $commands = @(
     Command = "Shell"
     Description = "Enters the Broadcaster shell terminal"
     Action = {
-        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
         Enter-Terminal "Shell"
         Get-Commands
     }
@@ -258,9 +257,7 @@ $commands = @(
     Command = "Terminal"
     Description = "Enters a Broadcaster terminal"
     Action = {
-        $terminal = Get-Terminal
-        Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
-        Enter-Terminal $terminal
+        Enter-Terminal (Get-Terminal)
         Get-Commands
     }
 }
