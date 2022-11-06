@@ -366,6 +366,7 @@ function Get-Commands
         }
     }
     $list += [pscustomobject]@{ }
+    $list += [pscustomobject]@{ Command = "Help"; Description = "Prints the commands list" }
     $list += [pscustomobject]@{ Command = "Exit"; Description = "Closes the Broadcaster Manager" }
     $list | Format-Table | Out-Host
 }
@@ -378,6 +379,10 @@ while ($true) {
     if ($command -ieq "exit") {
         Write-Host "> Exiting..."
         Exit;
+    }
+    if ($command -ieq "help") {
+        Get-Commands
+        continue;
     }
     $foundCommand = $false;
     foreach ($c in $commands) {
