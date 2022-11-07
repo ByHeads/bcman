@@ -165,19 +165,134 @@ function Get-SoftwareProduct
     }
 }
 
+function Create-WorkstationGroup
+{
+    $name = Read-Host "> Enter a name for the new workstation group"
+    $existingGroups = irm "$bc/WorkstationGroups" @getSettings | Select-Object -first 1
+    $groupExists = [bool]($existingGroups.PSobject.Properties.name -match $name)
+    if ($groupExists) {
+        Write-Host "A group with name $name already exists"
+        return Create-WorkstationGroup
+    }
+    return $name
+}
+
+function Get-WorkstationGroup
+{
+    $input = Read-Host "> Enter the name of a workstation group, 'list' for available groups, 'new' to create one or 'cancel' to cancel"
+    switch ( $input.Trim()) {
+        "list" {
+            Write-Host ""
+            $groups = irm "$bc/WorkstationGroups" @getSettings | Select-Object -first 1
+            $groups | Get-Member -MemberType NoteProperty | ForEach-Object {
+                $_.Name | Out-Host
+            }
+            Write-Host ""
+            return Get-WorkstationGroup
+        }
+        "new" { return Create-WorkstationGroup }
+        "cancel" { return $null }
+        "" {
+            Write-Host "Invalid workstation group name"
+            return Get-WorkstationGroup
+        }
+        default { return $input; }
+    }
+}
+
+function Get-WorkstationGroupMembers
+{
+    param($group)
+    return (irm "$bc/WorkstationGroups/_/select=$group" @getSettings | Select-Object -first 1).$group
+}
+
+function Add-WorkstationGroupMember
+{
+    param($group)
+    $workstationId = Get-WorkstationId
+    if (!$workstationId) {
+        return;
+    }
+    $currentMembers = Get-WorkstationGroupMembers $group
+    if (!$currentMembers) {
+        $currentMembers = @()
+    }
+    $currentMembers += $workstationId
+    $body = @{ $group = $currentMembers } | ConvertTo-Json
+    $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
+    if ($result.Status -eq "success") {
+        Write-Host "$workstationId was added to group $group"
+    }
+    Add-WorkstationGroupMember $group
+}
+
+function Remove-WorkstationGroupMember
+{
+    param($group)
+    $workstationId = Get-WorkstationId
+    if (!$workstationId) {
+        return;
+    }
+    $currentMembers = Get-WorkstationGroupMembers $group
+    if ($currentMembers) {
+        $newMembers = @()
+        foreach ($member in $currentMembers) {
+            if ($member -ieq $workstationId) {
+                $newMembers += $member
+            }
+        }
+        $body = @{ $group = $newMembers } | ConvertTo-Json
+        $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
+    }
+    Write-Host "$workstationId was removed from the group $group"
+    Add-WorkstationGroupMember $group
+}
+
+function Manage-WorkstationGroup
+{
+    param($group)
+    $input = Read-Host "> Enter 'members' to list the members of $group, 'add' or 'remove' to edit members, 'delete' to delete the group or 'cancel' to cancel"
+    switch ( $input.Trim().ToLower()) {
+        "cancel" { return }
+        "members" {
+            Write-Host ""
+            Get-WorkstationGroupMembers $group | Out-Host
+            Write-Host ""
+            Manage-WorkstationGroup $group
+        }
+        "delete"{
+            $body = @{ $group = $null } | ConvertTo-Json
+            $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
+            Write-Host "$group was deleted"
+            return
+        }
+        "remove" {
+            Remove-WorkstationGroupMember $group
+            Manage-WorkstationGroup $group
+        }
+        "add" {
+            Add-WorkstationGroupMember $group
+            Manage-WorkstationGroup $group
+        }
+        default { Manage-WorkstationGroup $group }
+    }
+}
+
 function Get-WorkstationId
 {
-    $input = Read-Host "> Enter workstation ID or 'list' for a list of workstation IDs to choose from"
-    if ($input -ieq "list") {
-        irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
-        return Get-WorkstationId
+    $input = Read-Host "> Enter workstation ID, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
+    switch ( $input.Trim().ToLower()) {
+        "list" {
+            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
+            return Get-WorkstationId
+        }
+        "" {
+            Write-Host "Invalid workstation ID format"
+            return Get-WorkstationId
+        }
+        "cancel" { return $null }
+        default { return $input }
     }
-    $input = $input.Trim();
-    if ($input -eq "") {
-        Write-Host "Invalid workstation ID format"
-        return Get-WorkstationId
-    }
-    return $input
 }
 
 function Get-SoftwareProductVersion
@@ -223,7 +338,6 @@ $commands = @(
         irm "$bc/Config" @getSettings | Out-Host
     }
 }
-
 @{
     Command = "Launch"
     Description = "Enters the Broadcaster LaunchCommands terminal"
@@ -255,10 +369,10 @@ $commands = @(
         $softwareProduct = Get-SoftwareProduct
         $version = Get-SoftwareProductVersion $softwareProduct
         if ($version) {
-            $body = @{ Deploy = $true } | ConvertTo-Json
             $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
             $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
             Write-Host "$softwareProduct $version is now downloading to the Broadcaster. Be patient..."
+            $body = @{ Deploy = $true } | ConvertTo-Json
             $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
             if ($result.Status -eq "success") {
                 Write-Host "$softwareProduct $version was successfully deployed"
@@ -337,6 +451,17 @@ $commands = @(
             }
         }
         Details
+    }
+}
+@{
+    Command = "Groups"
+    Description = "Lists and assigns workstation group members"
+    Action = {
+        $group = Get-WorkstationGroup
+        if (!$group) {
+            return;
+        }
+        Manage-WorkstationGroup $group
     }
 }
 )
