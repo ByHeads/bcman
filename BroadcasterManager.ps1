@@ -81,13 +81,11 @@ function Enter-Terminal
 {
     param($terminal)
     Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
-    $sendQueue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[String]'
     $ws = New-Object Net.WebSockets.ClientWebSocket
     $ws.Options.Credentials = $credentials
-    $cts = New-Object Threading.CancellationTokenSource
     $ct = New-Object Threading.CancellationToken($false)
     $baseUrl = $bc.Split("://")[1]
-    $connectTask = $ws.ConnectAsync("wss://$baseUrl/$terminal", $cts.Token)
+    $connectTask = $ws.ConnectAsync("wss://$baseUrl/$terminal", $ct)
     do { Sleep(1) }
     until ($connectTask.IsCompleted)
     if ($ws.State -ne [Net.WebSockets.WebSocketState]::Open) {
@@ -111,29 +109,18 @@ function Enter-Terminal
             & $outputRedirect.Invoke($result)
         }
     }
-    $sendJob = {
-        param($ws, $sendQueue)
-        $ct = New-Object Threading.CancellationToken($false)
-        $workitem = $null
-        while ($ws.State -eq [Net.WebSockets.WebSocketState]::Open) {
-            if ( $sendQueue.TryDequeue([ref]$workitem)) {
-                [ArraySegment[byte]]$msg = [Text.Encoding]::UTF8.GetBytes($workitem)
-                $ws.SendAsync($msg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $ct).GetAwaiter().GetResult() | Out-Null
-            }
-        }
-    }
     $receiver = [PowerShell]::Create()
     $outputRedirect = [scriptblock]{ param($res); $res | Out-Host }
     $receiver.AddScript($receiveJob).AddParameter("ws", $ws).AddParameter("outputRedirect", $outputRedirect).BeginInvoke() | Out-Null
-    $sender = [PowerShell]::Create()
-    $sender.AddScript($sendJob).AddParameter("ws", $ws).AddParameter("sendQueue", $sendQueue).BeginInvoke() | Out-Null
     try {
         do {
             $input = Read-Host
             if ($input -ieq "exit") {
                 return;
             }
-            $sendQueue.Enqueue($input)
+            $ct = New-Object Threading.CancellationToken($false)
+            [ArraySegment[byte]]$message = [Text.Encoding]::UTF8.GetBytes($input)
+            $ws.SendAsync($message, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $ct).GetAwaiter().GetResult() | Out-Null
         } until ($ws.State -ne [Net.WebSockets.WebSocketState]::Open)
     }
     finally {
