@@ -237,11 +237,12 @@ function Remove-WorkstationGroupMember
     if ($currentMembers) {
         $newMembers = @()
         foreach ($member in $currentMembers) {
-            if ($member -ieq $workstationId) {
+            if ($member -ine $workstationId) {
                 $newMembers += $member
             }
         }
         $body = @{ $group = $newMembers } | ConvertTo-Json
+        $body | Out-Host
         $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
     }
     Write-Host "$workstationId was removed from the group $group"
