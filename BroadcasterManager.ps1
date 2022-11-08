@@ -1,3 +1,16 @@
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    # Upgrade to PowerShell 7
+    $coreVersion = Get-ItemPropertyValue -Path "HKLM:\SOFTWARE\Microsoft\PowerShellCore\InstalledVersions\*" -Name "SemanticVersion" -ErrorAction SilentlyContinue
+    if (!$coreVersion -or !$coreVersion.StartsWith("7")) {
+        Write-Host -NoNewline "> Installing PowerShell 7... "
+        iex "& { $( irm 'https://aka.ms/install-powershell.ps1' ) } -UseMSI -Quiet" *>&1 | Out-Null
+        $env:path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+        Write-Host "Done!"
+    }
+    & pwsh.exe -Command { irm 'https://raw.githubusercontent.com/ByHeads/BroadcasterManager/master/BroadcasterManager.ps1' | iex }
+    return
+}
+
 #region Welcome splash
 
 Write-Host ""
@@ -20,7 +33,7 @@ Write-Host ""
 function Get-BroadcasterUrl
 {
     $url = Read-Host "> Enter the URL to the Broadcaster"
-    $url = $url.Trim();
+    $url = $url.Trim()
     if (!$url.StartsWith("https://")) {
         $url = "https://" + $url
     }
@@ -60,7 +73,7 @@ function Get-Credentials
 
 $bc = Get-BroadcasterUrl
 $credentials = Get-Credentials
-Write-Host "Connection established!"
+Write-Host "Broadcaster connection confirmed!" -ForegroundColor "Green"
 
 $getSettings = @{
     Method = "GET"
@@ -116,7 +129,7 @@ function Enter-Terminal
         do {
             $input = Read-Host
             if ($input -ieq "exit") {
-                return;
+                return
             }
             $ct = New-Object Threading.CancellationToken($false)
             [ArraySegment[byte]]$message = [Text.Encoding]::UTF8.GetBytes($input)
@@ -130,8 +143,6 @@ function Enter-Terminal
         $ws.Dispose()
         $receiver.Stop()
         $receiver.Dispose()
-        $sender.Stop()
-        $sender.Dispose()
         Write-Host "Returning to Broadcaster Manager" -ForegroundColor Yellow
     }
 }
@@ -143,7 +154,7 @@ function Get-Terminal
         irm "$bc/AvailableResource/Kind=TerminalResource/select=Name" @getSettings | Out-Host
         return Get-Terminal
     }
-    $input = $input.Trim();
+    $input = $input.Trim()
     if ($input -eq "") {
         Write-Host "Invalid terminal name"
         return Get-WorkstationId
@@ -153,11 +164,12 @@ function Get-Terminal
 
 function Get-SoftwareProduct
 {
-    $input = Read-Host "> Enter software product name: WpfClient, PosServer or Receiver"
+    $input = Read-Host "> Enter software product name: WpfClient, PosServer or Receiver or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "receiver" { return "Receiver" }
         "wpfclient" { return "WpfClient" }
         "posserver" { return "PosServer" }
+        "cancel" { return $null }
         default {
             Write-Host "Unrecognized software product name $input"
             return Get-SoftwareProduct
@@ -196,7 +208,7 @@ function Get-WorkstationGroup
             Write-Host "Invalid workstation group name"
             return Get-WorkstationGroup
         }
-        default { return $input; }
+        default { return $input }
     }
 }
 
@@ -211,7 +223,7 @@ function Add-WorkstationGroupMember
     param($group)
     $workstationId = Get-WorkstationId
     if (!$workstationId) {
-        return;
+        return
     }
     $currentMembers = Get-WorkstationGroupMembers $group
     if (!$currentMembers) {
@@ -231,7 +243,7 @@ function Remove-WorkstationGroupMember
     param($group)
     $workstationId = Get-WorkstationId
     if (!$workstationId) {
-        return;
+        return
     }
     $currentMembers = Get-WorkstationGroupMembers $group
     if ($currentMembers) {
@@ -324,10 +336,17 @@ function Get-SoftwareProductVersion
 
 #endregion
 
-$commands = @(
+$getStatusCommands = @(
 @{
-    Command = "Status"
-    Description = "Prints the current status for all Receivers"
+    Command = "ReceiverStatus"
+    Description = "Prints the status for all connected Receivers"
+    Action = {
+        irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings | Out-Host
+    }
+}
+@{
+    Command = "ReceiverLog"
+    Description = "Prints the last recorded status for all connected and disconnected Receivers"
     Action = {
         irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings | Out-Host
     }
@@ -340,29 +359,76 @@ $commands = @(
     }
 }
 @{
-    Command = "Launch"
-    Description = "Enters the Broadcaster LaunchCommands terminal"
+    Command = "DeploymentInfo"
+    Description = "Prints details about deployed software versions on the Broadcaster"
     Action = {
-        Enter-Terminal "LaunchCommands"
-        Get-Commands
+        irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings | Out-Host
     }
 }
 @{
-    Command = "Shell"
-    Description = "Enters the Broadcaster shell terminal"
-    Action = {
-        Enter-Terminal "Shell"
-        Get-Commands
+    Command = "VersionInfo"
+    Description = "Prints details about a the installed software on Receivers"
+    Action = $_ = {
+        $softwareProduct = Get-SoftwareProduct
+        if (!$softwareProduct) {
+            return
+        }
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
+        $items = @()
+        foreach ($r in $response) {
+            $items += [pscustomobject]@{
+                WorkstationId = $r.WorkstationId
+                LastActive = $r.LastActive
+                IsInstalled = $r.Product.IsInstalled
+                IsRunning = $r.Product.IsRunning
+                CurrentVersion = $r.Product.CurrentVersion
+                DeployedVersions = $r.Product.DeployedVersions
+                LaunchedVersion = $r.Product.LaunchedVersion
+            }
+        }
+        $items | Format-Table | Out-Host
+        & $_
     }
 }
 @{
-    Command = "Terminal"
-    Description = "Enters a Broadcaster terminal"
+    Command = "ReplicationInfo"
+    Description = "Prints details about a the replication status of Receivers"
     Action = {
-        Enter-Terminal (Get-Terminal)
-        Get-Commands
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
+        $items = @()
+        foreach ($r in $response) {
+            $items += [pscustomobject]@{
+                WorkstationId = $r.WorkstationId
+                LastActive = $r.LastActive
+                ReplicationVersion = $r.Replication.ReplicationVersion
+                AwaitsInitialization = $r.Replication.AwaitsInitialization
+            }
+        }
+        $items | Format-Table | Out-Host
     }
 }
+@{
+    Command = "ReceiverDetails"
+    Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
+    Action = $_ = {
+        $workstationId = Get-WorkstationId
+        $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
+        if (!$response) {
+            Write-Host "Found no Receiver with workstation ID $workstationId"
+            & $_
+        }
+        else {
+            Write-Host ""
+            $response.Modules.PSObject.Properties | ForEach-Object {
+                Write-Host ($_.Name + ":") -ForegroundColor Yellow
+                $_.Value | Out-Host
+            }
+            Write-Host ""
+        }
+    }
+}
+)
+$modifyCommands = @(
 @{
     Command = "Deploy"
     Description = "Lists and downloads deployable software versions to the Broadcaster"
@@ -386,91 +452,49 @@ $commands = @(
     }
 }
 @{
-    Command = "DeploymentInfo"
-    Description = "Prints details about deployed software versions on the Broadcaster"
-    Action = {
-        irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings | Out-Host
-    }
-}
-@{
-    Command = "VersionInfo"
-    Description = "Prints details about a the installed software on Receivers"
-    Action = {
-        $softwareProduct = Get-SoftwareProduct
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
-        $items = @()
-        foreach ($r in $response) {
-            $items += [pscustomobject]@{
-                WorkstationId = $r.WorkstationId
-                LastActive = $r.LastActive
-                IsInstalled = $r.Product.IsInstalled
-                IsRunning = $r.Product.IsRunning
-                CurrentVersion = $r.Product.CurrentVersion
-                DeployedVersions = $r.Product.DeployedVersions
-                LaunchedVersion = $r.Product.LaunchedVersion
-            }
-        }
-        $items | Format-Table | Out-Host
-    }
-}
-@{
-    Command = "ReplicationInfo"
-    Description = "Prints details about a the replication status of Receivers"
-    Action = {
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
-        $items = @()
-        foreach ($r in $response) {
-            $items += [pscustomobject]@{
-                WorkstationId = $r.WorkstationId
-                LastActive = $r.LastActive
-                ReplicationVersion = $r.Replication.ReplicationVersion
-                AwaitsInitialization = $r.Replication.AwaitsInitialization
-            }
-        }
-        $items | Format-Table | Out-Host
-    }
-}
-@{
-    Command = "Details"
-    Description = "Prints details about a specific Receiver"
-    Action = {
-        function Details
-        {
-            $workstationId = Get-WorkstationId
-            $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
-            if (!$response) {
-                Write-Host "Found no Receiver with workstation ID $workstationId"
-                return Details
-            }
-            else {
-                Write-Host ""
-                $response.Modules.PSObject.Properties | ForEach-Object {
-                    Write-Host ($_.Name + ":") -ForegroundColor Yellow
-                    $_.Value | Out-Host
-                }
-                Write-Host ""
-            }
-        }
-        Details
-    }
-}
-@{
     Command = "Groups"
     Description = "Lists and assigns workstation group members"
     Action = {
         $group = Get-WorkstationGroup
         if (!$group) {
-            return;
+            return
         }
         Manage-WorkstationGroup $group
     }
 }
 )
+$launchTerminalsCommands = @(
+@{
+    Command = "Launch"
+    Description = "Enters the Broadcaster LaunchCommands terminal"
+    Action = { Enter-Terminal "LaunchCommands" }
+}
+@{
+    Command = "AccessToken"
+    Description = "Enters the Broadcaster access token terminal"
+    Action = { Enter-Terminal "AccessToken.Commands" }
+}
+@{
+    Command = "Shell"
+    Description = "Enters the Broadcaster shell terminal"
+    Action = { Enter-Terminal "Shell" }
+}
+@{
+    Command = "Terminal"
+    Description = "Enters a Broadcaster terminal"
+    Action = { Enter-Terminal (Get-Terminal) }
+}
+)
+$otherCommands = @(
+@{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
+@{ Command = "Exit"; Description = "Closes the Broadcaster Manager"; Action = { Exit } }
+)
 
 #region Read-eval loop
 
-function Get-Commands
+function Write-Commands
 {
+    param($commands)
     $list = @()
     foreach ($c in $commands | Sort-Object -Property Command) {
         $list += [pscustomobject]@{
@@ -478,36 +502,46 @@ function Get-Commands
             Description = $c.Description
         }
     }
-    $list += [pscustomobject]@{ }
-    $list += [pscustomobject]@{ Command = "Help"; Description = "Prints the commands list" }
-    $list += [pscustomobject]@{ Command = "Exit"; Description = "Closes the Broadcaster Manager" }
     $list | Format-Table | Out-Host
 }
 
-Get-Commands
+function WriteAll-Commands
+{
+    Write-Host ""
+    Write-Host "GET STATUS:" -ForegroundColor Yellow
+    Write-Commands $getStatusCommands
+    Write-Host "MODIFY BROADCASTER:" -ForegroundColor Yellow
+    Write-Commands $modifyCommands
+    Write-Host "BROADCASTER TERMINALS:" -ForegroundColor Yellow
+    Write-Commands $launchTerminalsCommands
+    Write-Host "OTHER:" -ForegroundColor Yellow
+    Write-Commands $otherCommands
+}
+Write-Host ""
+
+$allCommands = $getStatusCommands + $modifyCommands + $launchTerminalsCommands + $otherCommands
 
 while ($true) {
-    $input = Read-Host "> Enter a command"
+    $input = Read-Host "> Enter a command ('help' to list commands)"
     $command = $input.Trim().ToLower()
     if ($command -ieq "exit") {
         Write-Host "> Exiting..."
-        Exit;
+        Exit
     }
     if ($command -ieq "help") {
-        Get-Commands
-        continue;
+        WriteAll-Commands
+        continue
     }
-    $foundCommand = $false;
-    foreach ($c in $commands) {
+    $foundCommand = $false
+    foreach ($c in $allCommands) {
         if ($c.Command -ieq $command) {
-            $foundCommand = $true;
+            $foundCommand = $true
             & $c.Action
         }
     }
     if (!$foundCommand) {
         Write-Host "> Unknown command $input"
         Start-Sleep 1
-        Get-Commands
     }
 }
 
