@@ -378,7 +378,7 @@ $getStatusCommands = @(
 @{
     Command = "VersionInfo"
     Description = "Prints details about a the installed software on Receivers"
-    Action = $_ = {
+    Action = $versionInfo_c = {
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
             return
@@ -401,7 +401,7 @@ $getStatusCommands = @(
             }
         }
         $items | Format-Table | Out-Host
-        & $_
+        & $versionInfo_c
     }
 }
 @{
@@ -428,12 +428,12 @@ $getStatusCommands = @(
 @{
     Command = "ReceiverDetails"
     Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
-    Action = $_ = {
+    Action = $receiverDetails_c = {
         $workstationId = Get-WorkstationId
         $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
         if (!$response) {
             Write-Host "Found no Receiver with workstation ID $workstationId"
-            & $_
+            & $receiverDetails_c
         }
         else {
             Write-Host ""
@@ -450,34 +450,41 @@ $modifyCommands = @(
 @{
     Command = "Deploy"
     Description = "Lists and downloads deployable software versions to the Broadcaster"
-    Action = {
+    Action = $deploy_c = {
         $softwareProduct = Get-SoftwareProduct
+        if (!$softwareProduct) {
+            return;
+        }
         $version = Get-SoftwareProductVersion $softwareProduct
-        if ($version) {
-            $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
-            $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
-            Write-Host "$softwareProduct $version is now downloading to the Broadcaster. Be patient..."
-            $body = @{ Deploy = $true } | ConvertTo-Json
-            $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
-            if ($result.Status -eq "success") {
-                Write-Host "$softwareProduct $version was successfully deployed"
-            }
-            else {
-                Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
-                Write-Host $result
-            }
+        if (!$version) {
+            return;
+        }
+        $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
+        $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
+        Write-Host "$softwareProduct $version is now downloading to the Broadcaster. Be patient..."
+        $body = @{ Deploy = $true } | ConvertTo-Json
+        $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
+        if ($result.Status -eq "success") {
+            Write-Host "$softwareProduct $version was successfully deployed"
+            & $deploy_c
+        }
+        else {
+            Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
+            Write-Host $result
+            & $deploy_c
         }
     }
 }
 @{
     Command = "Groups"
     Description = "Lists and assigns workstation group members"
-    Action = {
+    Action = $groups_c = {
         $group = Get-WorkstationGroup
         if (!$group) {
             return
         }
         Manage-WorkstationGroup $group
+        & $groups_c
     }
 }
 )
