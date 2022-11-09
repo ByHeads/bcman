@@ -346,7 +346,7 @@ $getStatusCommands = @(
     Description = "Prints the status for all connected Receivers"
     Action = {
         $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings
-        if ($list.Count -eq 0) { Write-Host "Found no connected receivers" }
+        if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
         else { $list | Out-Host }
     }
 }
