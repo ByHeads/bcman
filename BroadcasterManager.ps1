@@ -384,7 +384,7 @@ $getStatusCommands = @(
             return
         }
         $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
-        if ($list.Count -eq 0) {
+        if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
         }
@@ -409,7 +409,7 @@ $getStatusCommands = @(
     Description = "Prints details about a the replication status of Receivers"
     Action = {
         $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
-        if ($list.Count -eq 0) {
+        if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
         }
@@ -535,12 +535,22 @@ function WriteAll-Commands
     Write-Host "OTHER:" -ForegroundColor Yellow
     Write-Commands $otherCommands
 }
+
+function Write-HelpInfo
+{
+    Write-Host "Enter " -NoNewline
+    Write-Host "help" -NoNewLine -ForegroundColor Yellow
+    Write-Host " to print a list of all commands"
+}
+
+Write-Host ""
+Write-HelpInfo
 Write-Host ""
 
 $allCommands = $getStatusCommands + $modifyCommands + $launchTerminalsCommands + $otherCommands
 
 while ($true) {
-    $input = Read-Host "> Enter a command ('help' to list commands)"
+    $input = Read-Host "> Enter a command"
     $command = $input.Trim().ToLower()
     if ($command -ieq "exit") {
         Write-Host "> Exiting..."
@@ -559,6 +569,7 @@ while ($true) {
     }
     if (!$foundCommand) {
         Write-Host "> Unknown command $input"
+        Write-HelpInfo
         Start-Sleep 1
     }
 }
