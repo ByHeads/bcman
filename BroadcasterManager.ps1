@@ -267,9 +267,14 @@ function Manage-WorkstationGroup
     switch ( $input.Trim().ToLower()) {
         "cancel" { return }
         "members" {
-            Write-Host ""
-            Get-WorkstationGroupMembers $group | Out-Host
-            Write-Host ""
+            $members = Get-WorkstationGroupMembers $group
+            if ($members.Count -eq 0) {
+                Write-Host "$group has no members"
+            } else {
+                Write-Host ""
+                $members | Out-Host
+                Write-Host ""
+            }
             Manage-WorkstationGroup $group
         }
         "delete"{
@@ -315,16 +320,16 @@ function Get-SoftwareProductVersion
     if ($input -ieq "list") {
         Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
         $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
-        Write-Host ""
         if ($versions.Count -eq 0) {
-            "Found no deployable versions of $softwareProduct"
+            Write-Host "Found no deployable versions of $softwareProduct"
         }
         else {
+            Write-Host ""
             foreach ($v in $versions) {
                 Write-Host $v.Version
             }
+            Write-Host ""
         }
-        Write-Host ""
         return Get-SoftwareProductVersion $softwareProduct
     }
     if ($input -ieq "cancel") {
@@ -439,7 +444,16 @@ $getStatusCommands = @(
             Write-Host ""
             $response.Modules.PSObject.Properties | ForEach-Object {
                 Write-Host ($_.Name + ":") -ForegroundColor Yellow
-                $_.Value | Out-Host
+                $json = $_.Value | select -ExcludeProperty "@Type", "ProductName" | ConvertTo-Json
+                $json = $json.Trim(@('{', '}'))
+                if (($json.Length -eq 0) -and ($_.Name -eq "Downloads")) {
+                    Write-Host ""
+                    Write-Host "  No download tasks"
+                    Write-Host ""
+                }
+                else {
+                    $json | Out-Host
+                }
             }
             Write-Host ""
         }
