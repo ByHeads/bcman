@@ -316,8 +316,13 @@ function Get-SoftwareProductVersion
         Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
         $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
         Write-Host ""
-        foreach ($v in $versions) {
-            Write-Host $v.Version
+        if ($versions.Count -eq 0) {
+            "Found no deployable versions of $softwareProduct"
+        }
+        else {
+            foreach ($v in $versions) {
+                Write-Host $v.Version
+            }
         }
         Write-Host ""
         return Get-SoftwareProductVersion $softwareProduct
@@ -340,14 +345,18 @@ $getStatusCommands = @(
     Command = "ReceiverStatus"
     Description = "Prints the status for all connected Receivers"
     Action = {
-        irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings | Out-Host
+        $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings
+        if ($list.Count -eq 0) { Write-Host "Found no connected receivers" }
+        else { $list | Out-Host }
     }
 }
 @{
     Command = "ReceiverLog"
     Description = "Prints the last recorded status for all connected and disconnected Receivers"
     Action = {
-        irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings | Out-Host
+        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings
+        if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
+        else { $list | Out-Host }
     }
 }
 @{
@@ -361,7 +370,9 @@ $getStatusCommands = @(
     Command = "DeploymentInfo"
     Description = "Prints details about deployed software versions on the Broadcaster"
     Action = {
-        irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings | Out-Host
+        $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings
+        if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
+        else { $list | Out-Host }
     }
 }
 @{
@@ -373,6 +384,10 @@ $getStatusCommands = @(
             return
         }
         $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
+        if ($list.Count -eq 0) {
+            Write-Host "Found no connected or disconnected Receivers"
+            return
+        }
         $items = @()
         foreach ($r in $response) {
             $items += [pscustomobject]@{
@@ -394,6 +409,10 @@ $getStatusCommands = @(
     Description = "Prints details about a the replication status of Receivers"
     Action = {
         $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
+        if ($list.Count -eq 0) {
+            Write-Host "Found no connected or disconnected Receivers"
+            return
+        }
         $items = @()
         foreach ($r in $response) {
             $items += [pscustomobject]@{
