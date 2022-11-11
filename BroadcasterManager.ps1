@@ -60,9 +60,7 @@ function Get-BroadcasterUrl
 
 function Get-Credentials
 {
-    param($apiKey)
-    if (!$apiKey) { $apiKey = Read-Host "> Enter the API key to use" -AsSecureString }
-    else { $apiKey = ConvertTo-SecureString $apiKey -AsPlainText -Force }
+    $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
     $credentials = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
     try {
         $result = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5
@@ -76,7 +74,7 @@ function Get-Credentials
 }
 
 $bc = Get-BroadcasterUrl $args[0]
-$credentials = Get-Credentials $args[1]
+$credentials = Get-Credentials
 Write-Host "Broadcaster connection confirmed!" -ForegroundColor "Green"
 
 $getSettings = @{
