@@ -31,7 +31,10 @@ Write-Host ""
 
 function Get-BroadcasterUrl
 {
-    $url = Read-Host "> Enter the URL to the Broadcaster"
+    param($url)
+    if (!$url) {
+        $url = Read-Host "> Enter the URL to the Broadcaster"
+    }
     $url = $url.Trim()
     if (!$url.StartsWith("https://")) {
         $url = "https://" + $url
@@ -57,7 +60,9 @@ function Get-BroadcasterUrl
 
 function Get-Credentials
 {
-    $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
+    param($apiKey)
+    if (!$apiKey) { $apiKey = Read-Host "> Enter the API key to use" -AsSecureString }
+    else { $apiKey = ConvertTo-SecureString $apiKey -AsPlainText -Force }
     $credentials = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
     try {
         $result = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5
@@ -70,8 +75,8 @@ function Get-Credentials
     return Get-Credentials
 }
 
-$bc = Get-BroadcasterUrl
-$credentials = Get-Credentials
+$bc = Get-BroadcasterUrl $args[0]
+$credentials = Get-Credentials $args[1]
 Write-Host "Broadcaster connection confirmed!" -ForegroundColor "Green"
 
 $getSettings = @{
