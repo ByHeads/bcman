@@ -31,10 +31,7 @@ Write-Host ""
 
 function Get-BroadcasterUrl
 {
-    param($url)
-    if (!$url) {
-        $url = Read-Host "> Enter the URL to the Broadcaster"
-    }
+    $url = Read-Host "> Enter the URL to the Broadcaster"
     $url = $url.Trim()
     if (!$url.StartsWith("https://")) {
         $url = "https://" + $url
@@ -73,7 +70,7 @@ function Get-Credentials
     return Get-Credentials
 }
 
-$bc = Get-BroadcasterUrl $args[0]
+$bc = Get-BroadcasterUrl
 $credentials = Get-Credentials
 Write-Host "Broadcaster connection confirmed!" -ForegroundColor "Green"
 
