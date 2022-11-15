@@ -352,7 +352,7 @@ $getStatusCommands = @(
     Action = {
         $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings
         if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
-        else { $list | Out-Host }
+        else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
     }
 }
 @{
@@ -361,7 +361,7 @@ $getStatusCommands = @(
     Action = {
         $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings
         if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
-        else { $list | Out-Host }
+        else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
     }
 }
 @{
@@ -377,7 +377,7 @@ $getStatusCommands = @(
     Action = {
         $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings
         if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
-        else { $list | Out-Host }
+        else { $list | Sort-Object -Property "ProductName" | Out-Host }
     }
 }
 @{
@@ -401,11 +401,11 @@ $getStatusCommands = @(
                 IsInstalled = $r.Product.IsInstalled
                 IsRunning = $r.Product.IsRunning
                 CurrentVersion = $r.Product.CurrentVersion
-                DeployedVersions = $r.Product.DeployedVersions
+                DeployedVersions = $r.Product.DeployedVersions | Sort-Object
                 LaunchedVersion = $r.Product.LaunchedVersion
             }
         }
-        $items | Format-Table | Out-Host
+        $items | Sort-Object -Property "WorkstationId" | Format-Table | Out-Host
         & $versionInfo_c
     }
 }
@@ -427,7 +427,7 @@ $getStatusCommands = @(
                 AwaitsInitialization = $r.Replication.AwaitsInitialization
             }
         }
-        $items | Format-Table | Out-Host
+        $items | Sort-Object -Property "WorkstationId" | Format-Table | Out-Host
     }
 }
 @{
@@ -442,18 +442,22 @@ $getStatusCommands = @(
         }
         else {
             Write-Host ""
-            $response.Modules.PSObject.Properties | ForEach-Object {
+            $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                 Write-Host ($_.Name + ":") -ForegroundColor Yellow
-                $json = $_.Value | select -ExcludeProperty "@Type", "ProductName" | ConvertTo-Json
-                $json = $json.Trim(@('{', '}'))
-                if (($json.Length -eq 0) -and ($_.Name -eq "Downloads")) {
-                    Write-Host ""
-                    Write-Host "  No download tasks"
-                    Write-Host ""
+                Write-Host ""
+                $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
+                $ht = @{ }
+                $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
+                if (($ht.Count -eq 0) -and ($_.Name -eq "Downloads")) {
+                    Write-Host "No download tasks"
                 }
                 else {
-                    $json | Out-Host
+                    foreach ($key in $ht.Keys | Sort-Object) {
+                        $val = $ht[$key] | ConvertTo-Json
+                        Write-Host "$key`: $val"
+                    }
                 }
+                Write-Host ""
             }
             Write-Host ""
         }
