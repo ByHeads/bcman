@@ -491,25 +491,28 @@ $modifyCommands = @(
     Action = $deploy_c = {
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
-            return;
+            return
         }
         $version = Get-SoftwareProductVersion $softwareProduct
         if (!$version) {
-            return;
+            return
         }
         $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
         $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
-        Write-Host "$softwareProduct $version is now downloading to the Broadcaster. Be patient..."
+        Write-Host "Attempting to download $softwareProduct $version to the Broadcaster. Be patient..."
         $body = @{ Deploy = $true } | ConvertTo-Json
         $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
         if ($result.Status -eq "success") {
-            Write-Host "$softwareProduct $version was successfully deployed"
-            & $deploy_c
+            if ($result.DataCount -eq 0) {
+                Write-Host "No version was deployed. Please ensure that version $version of $softwareProduct is deployable."
+                & $deploy_c
+            } else {
+                Write-Host "$softwareProduct $version was successfully deployed!"
+            }
         }
         else {
             Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
             Write-Host $result
-            & $deploy_c
         }
     }
 }
