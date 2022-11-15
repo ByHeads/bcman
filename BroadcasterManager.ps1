@@ -163,11 +163,31 @@ function Get-Terminal
 
 function Get-SoftwareProduct
 {
-    $input = Read-Host "> Enter software product name: WpfClient, PosServer or Receiver or 'cancel' to cancel"
+    $input = Read-Host "> Enter software product name: WpfClient, PosServer, Receiver or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "receiver" { return "Receiver" }
         "wpfclient" { return "WpfClient" }
         "posserver" { return "PosServer" }
+        "elephant" {
+            Write-Host "Sorry, I can't really deploy elephants ¯\_(ツ)_/¯ ... only squirrels, beavers and the occasional hedgehog"
+            return Get-SoftwareProduct
+        }
+        "squirrel" {
+            Write-Host "Squirrel, you say... let me look"
+            Sleep 3
+            Write-Host "... still looking ..."
+            Sleep 4
+            Write-Host "What did you want me to look for again?"
+            return Get-SoftwareProduct
+        }
+        "beaver" {
+            Write-Host "OK, a beaver has been attached to the Broadcaster Manager. Use it with care!"
+            return Get-SoftwareProduct
+        }
+        "hedgehog" {
+            Write-Host "Fresh out of hedgehogs today. Try again later."
+            return Get-SoftwareProduct
+        }
         "cancel" { return $null }
         default {
             Write-Host "Unrecognized software product name $input"
@@ -580,6 +600,10 @@ while ($true) {
     if ($command -ieq "exit") {
         Write-Host "> Exiting..."
         Exit
+    }
+    if ($command -ieq "hi" -or $command -ieq "hello") {
+        Write-Host "Well hello there!"
+        continue
     }
     if ($command -ieq "help") {
         WriteAll-Commands
