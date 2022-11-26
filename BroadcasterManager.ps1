@@ -86,6 +86,17 @@ $patchSettings = @{
     Headers = @{ "Content-Type" = "application/json" }
 }
 
+$postSettings = @{
+    Method = "POST"
+    Credential = $credentials
+    Headers = @{ "Content-Type" = "application/json" }
+}
+
+$deleteSettings = @{
+    Method = "DELETE"
+    Credential = $credentials
+}
+
 #endregion 
 #region Lib
 
@@ -332,11 +343,12 @@ function Get-WorkstationId
     }
 }
 
-function Get-SoftwareProductVersion
+function Get-DeployableSoftwareProductVersion
 {
     param($softwareProduct)
     $message = "> Enter $softwareProduct version to deploy, 'list' for deployable versions of $softwareProduct or 'cancel' to cancel"
     $input = Read-Host $message
+    $input = $input.Trim()
     if ($input -ieq "list") {
         Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
         $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
@@ -350,7 +362,7 @@ function Get-SoftwareProductVersion
             }
             Write-Host ""
         }
-        return Get-SoftwareProductVersion $softwareProduct
+        return Get-DeployableSoftwareProductVersion $softwareProduct
     }
     if ($input -ieq "cancel") {
         return $null
@@ -358,9 +370,132 @@ function Get-SoftwareProductVersion
     $r = $null
     if (![System.Version]::TryParse($input, [ref]$r)) {
         Write-Host "Invalid version format. Try again."
-        return Get-SoftwareProductVersion $softwareProduct
+        return Get-DeployableSoftwareProductVersion $softwareProduct
     }
     return $r
+}
+
+function Get-LaunchableSoftwareProductVersion
+{
+    param($softwareProduct)
+    $message = "> Enter $softwareProduct version to launch, 'list' for launchable versions of $softwareProduct or 'cancel' to cancel"
+    $input = Read-Host $message
+    $input = $input.Trim()
+    if ($input -ieq "list") {
+        $versions = irm "$bc/File/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
+        if ($versions.Count -eq 0) {
+            Write-Host "Found no launchable versions of $softwareProduct"
+        }
+        else {
+            Write-Host ""
+            foreach ($v in $versions) {
+                Write-Host $v.Version
+            }
+            Write-Host ""
+        }
+        return Get-LaunchableSoftwareProductVersion $softwareProduct
+    }
+    if ($input -ieq "cancel") {
+        return $null
+    }
+    $r = $null
+    if (![System.Version]::TryParse($input, [ref]$r)) {
+        Write-Host "Invalid version format. Try again."
+        return Get-LaunchableSoftwareProductVersion $softwareProduct
+    }
+    return $r
+}
+
+function Get-RuntimeId
+{
+    param($softwareProduct)
+    $message = "> Enter runtime ID for the version to launch, press enter for 'win7-x64' or 'cancel' to cancel"
+    $input = Read-Host $message
+    $input = $input.Trim()
+    if ($input -ieq "") {
+        return "win7-x64"
+    }
+    if ($input -ieq "cancel") {
+        return $null
+    }
+    else {
+        return $input
+    }
+}
+
+function Get-DateTime
+{
+    $input = Read-Host "> Enter date and time (UTC) for the launch or 'cancel' to cancel. Example: 2023-05-01 12:15"
+    $input = $input.Trim()
+    if ($input -ieq "cancel") {
+        return $null
+    }
+    $dateTime = $null
+    try {
+        return Get-Date -AsUTC ([DateTime]$input) -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Host "Invalid date and time format. Example: 2023-05-01 12:15"
+        return Get-DateTime
+    }
+}
+
+function Get-LaunchSchedule
+{
+    $launches = irm "$bc/LaunchSchedule" @getSettings
+    if ($launches.Count -eq 0) {
+        Write-Host "Found no scheduled lauches"
+    }
+    else {
+        $i = 1
+        $items = @()
+        foreach ($l in $launches | Sort-Object -Property "DateTime") {
+            $items += [PSCustomObject]@{
+                Id = $i
+                ProductName = $l.ProductName
+                Version = $l.Version
+                RuntimeId = $l.RuntimeId
+                DateTime = $l.DateTime
+            }
+            $i += 1
+        }
+        $items | Format-Table | Out-Host
+        $input = Read-Host "> Enter 'delete' to delete a scheduled launch or press enter to continue"
+        if ($input -ieq "delete") {
+            $input = Read-Host "> Enter the Id of the scheduled launch to delete or 'cancel' to cancel"
+            $input = $input.Trim()
+            if ($input -ieq "cancel") {
+            }
+            else {
+                $foundMatch = $false
+                foreach ($item in $items) {
+                    if ($item.Id -eq $input) {
+                        $foundMatch = $true
+                        $productName = $item.ProductName
+                        $version = $item.Version
+                        $runtimeId = $item.RuntimeId
+                        $dateTime = $item.DateTime.ToString("o")
+                        $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId/unsafe=true" @deleteSettings
+                        if ($result.status -eq "success") {
+                            if ($result.DeletedCount -gt 0) {
+                                Write-Host "Successfully deleted scheduled launch with Id $input"
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                        else {
+                            Write-Host "An error occured while trying to delete scheduled launch with Id $input"
+                            Write-Host $result
+                        }
+                        break
+                    }
+                }
+                if (!$foundMatch) {
+                    Write-Host "Found no scheduled launch with Id $input"
+                }
+                Get-LaunchSchedule
+            }
+        }
+    }
 }
 
 #endregion
@@ -493,7 +628,7 @@ $modifyCommands = @(
         if (!$softwareProduct) {
             return
         }
-        $version = Get-SoftwareProductVersion $softwareProduct
+        $version = Get-DeployableSoftwareProductVersion $softwareProduct
         if (!$version) {
             return
         }
@@ -517,6 +652,56 @@ $modifyCommands = @(
     }
 }
 @{
+    Command = "Launch"
+    Description = "Lists launchable software versions and schedules launches"
+    Action = $launch_c = {
+        $message = "> Enter 'list' to list and edit scheduled launches, 'schedule' to schedule a new launch or 'cancel' to cancel"
+        $input = Read-Host $message
+        if ($input -ieq "list") {
+            Get-LaunchSchedule
+            & $launch_c
+            return
+        }
+        if ($input -ieq "schedule") {
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
+            }
+            $version = Get-LaunchableSoftwareProductVersion $softwareProduct
+            if (!$version) {
+                return
+            }
+            $runtimeId = Get-RuntimeId
+            if (!$runtimeId) {
+                return
+            }
+            $datetime = Get-DateTime
+            if (!$datetime) {
+                return
+            }
+            $body = @{
+                ProductName = $softwareProduct
+                Version = $version.ToString()
+                RuntimeId = $runtimeId
+                DateTime = $datetime
+            } | ConvertTo-Json
+            $result = irm "$bc/LaunchSchedule" -Body $body @postSettings
+            if ($result.Status -eq "success") {
+                Write-Host "A launch was successfully scheduled"
+                & $launch_c
+            }
+            else {
+                Write-Host "An error occured while scheduling launch"
+                Write-Host $result
+                & $launch_c
+            }
+        }
+        if ($input -ieq "cancel") {
+            return
+        }
+    }
+}
+@{
     Command = "Groups"
     Description = "Lists and assigns workstation group members"
     Action = $groups_c = {
@@ -531,7 +716,7 @@ $modifyCommands = @(
 )
 $launchTerminalsCommands = @(
 @{
-    Command = "Launch"
+    Command = "LaunchCommands"
     Description = "Enters the Broadcaster LaunchCommands terminal"
     Action = { Enter-Terminal "LaunchCommands" }
 }
