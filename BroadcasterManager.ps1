@@ -432,7 +432,7 @@ function Get-DateTime
     }
     $dateTime = $null
     try {
-        return Get-Date -AsUTC ([DateTime]$input) -ErrorAction SilentlyContinue
+        return Get-Date ([DateTime]$input) -ErrorAction SilentlyContinue
     }
     catch {
         Write-Host "Invalid date and time format. Example: 2023-05-01 12:15"
