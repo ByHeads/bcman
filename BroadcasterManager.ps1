@@ -474,8 +474,8 @@ function Get-LaunchSchedule
                         $productName = $item.ProductName
                         $version = $item.Version
                         $runtimeId = $item.RuntimeId
-                        $dateTime = $item.DateTime.ToString("o")
-                        $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId&DateTime=$dateTime/unsafe=true" @deleteSettings
+                        $dateTicks = $item.DateTime.Ticks;
+                        $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId&DateTime.Ticks=$dateTicks/unsafe=true" @deleteSettings
                         if ($result.status -eq "success") {
                             if ($result.DeletedCount -gt 0) {
                                 Write-Host "Successfully deleted scheduled launch with Id $input"
