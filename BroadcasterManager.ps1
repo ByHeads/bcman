@@ -591,7 +591,7 @@ $getStatusCommands = @(
     Action = $receiverDetails_c = {
         $workstationId = Get-WorkstationId
         if (!$workstationId) {
-            return;
+            return
         }
         $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
         if (!$response) {
