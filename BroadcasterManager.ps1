@@ -590,6 +590,9 @@ $getStatusCommands = @(
     Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
     Action = $receiverDetails_c = {
         $workstationId = Get-WorkstationId
+        if (!$workstationId) {
+            return;
+        }
         $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
         if (!$response) {
             Write-Host "Found no Receiver with workstation ID $workstationId"
