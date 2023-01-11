@@ -455,7 +455,7 @@ function Get-LaunchSchedule
                 ProductName = $l.ProductName
                 Version = $l.Version
                 RuntimeId = $l.RuntimeId
-                DateTime = $l.DateTime
+                "DateTime (UTC)" = $l.DateTime
             }
             $i += 1
         }
