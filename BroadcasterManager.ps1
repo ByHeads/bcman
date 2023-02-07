@@ -245,7 +245,7 @@ function Get-WorkstationGroup
 function Get-WorkstationGroupMembers
 {
     param($group)
-    return (irm "$bc/WorkstationGroups/_/select=$group" @getSettings | Select-Object -first 1).$group
+    return (irm "$bc/WorkstationGroups/_/select=$group" @getSettings)[0].$group
 }
 
 function Add-WorkstationGroupMember
@@ -255,7 +255,7 @@ function Add-WorkstationGroupMember
     if (!$workstationId) {
         return
     }
-    $currentMembers = Get-WorkstationGroupMembers $group
+    [string[]]$currentMembers = Get-WorkstationGroupMembers $group
     if (!$currentMembers) {
         $currentMembers = @()
     }
@@ -284,7 +284,6 @@ function Remove-WorkstationGroupMember
             }
         }
         $body = @{ $group = $newMembers } | ConvertTo-Json
-        $body | Out-Host
         $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
     }
     Write-Host "$workstationId was removed from the group $group"
@@ -474,7 +473,7 @@ function Get-LaunchSchedule
                         $productName = $item.ProductName
                         $version = $item.Version
                         $runtimeId = $item.RuntimeId
-                        $dateTicks = $item.DateTime.Ticks;
+                        $dateTicks = $item.DateTime.Ticks
                         $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId&DateTime.Ticks=$dateTicks/unsafe=true" @deleteSettings
                         if ($result.status -eq "success") {
                             if ($result.DeletedCount -gt 0) {
@@ -501,6 +500,37 @@ function Get-LaunchSchedule
 #endregion
 
 $getStatusCommands = @(
+@{
+    Command = "Status"
+    Description = "Prints a status overview of the Broadcaster"
+    Action = {
+        $config = (irm "$bc/Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version,COMPUTERNAME->ComputerName" @getSettings)[0]
+        $receiverCount = (irm "$bc/Receiver" @getSettings).Count
+        $nextAvailableVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0].Version
+        Write-Host ""
+        Write-Host "Host" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Broadcaster URL: $bc"
+        Write-Host "Host computer: $( $config.ComputerName )"
+        Write-Host "Connected receivers: $receiverCount"
+        Write-Host ""
+        Write-Host "Broadcaster version" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Current version: " -NoNewline
+        Write-Host $config.Version
+        Write-Host "Latest version: " -NoNewline
+        if ($nextAvailableVersion) {
+            Write-Host $nextAvailableVersion -ForegroundColor Green -NoNewline
+            Write-Host " (use " -NoNewline
+            Write-Host "Update" -ForegroundColor Yellow -NoNewline
+            Write-Host " to update now)"
+        }
+        else {
+            Write-Host $config.Version
+        }
+        Write-Host ""
+    }
+}
 @{
     Command = "ReceiverStatus"
     Description = "Prints the status for all connected Receivers"
@@ -714,6 +744,50 @@ $modifyCommands = @(
         }
         Manage-WorkstationGroup $group
         & $groups_c
+    }
+}
+@{
+    Command = "Update"
+    Description = "Updates the Broadcaster to a new version"
+    Action = {
+        $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettings)[0].Version
+        $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0]
+        if (!$nextAvailable) {
+            Write-Host "> This Broadcaster is already running the latest version " -NoNewline
+            Write-Host $version -ForegroundColor Green -NoNewline
+            Write-Host ""
+            return
+        }
+        Write-Host "> This Broadcaster is running version $version. A new version " -NoNewline
+        Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
+        Write-Host " is available"
+        $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
+        $response = $response.Trim().ToLower()
+        if ($response -ieq "update") {
+            Write-Host "> Updating Broadcaster to version " -NoNewline
+            Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
+            Write-Host " * " -NoNewline
+            $out = Start-Job -ScriptBlock {
+                $fullName = [System.Web.HttpUtility]::UrlEncode($using:nextAvailable.FullName)
+                $body = @{ Install = $true } | ConvertTo-Json
+                $lbc = $using:bc; $lpatchSettings = $using:patchSettings;
+                irm "$lbc/BroadcasterUpdate/FullName=$fullName" -Body $body @lpatchSettings
+            }
+            while ($true) {
+                Write-Host "* " -NoNewline
+                $interval = Start-Sleep 3 &
+                try {
+                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 3 @getSettings -ErrorAction SilentlyContinue)[0].Version
+                    if ($currentVersion -eq $nextAvailable.Version) {
+                        Write-Host "Update complete!" -ForegroundColor Green -NoNewline
+                        Write-Host ""
+                        break
+                    }
+                }
+                catch { }
+                Receive-Job $interval -Wait
+            }
+        }
     }
 }
 )
