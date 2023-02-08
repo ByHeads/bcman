@@ -827,32 +827,19 @@ $modifyCommands = @(
         $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
         $response = $response.Trim().ToLower()
         if ($response -ieq "update") {
+            $fullName = [System.Web.HttpUtility]::UrlEncode($nextAvailable.FullName)
+            $body = @{ Install = $true } | ConvertTo-Json
+            $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
             Write-Host "> Updating Broadcaster to version " -NoNewline
             Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
-            Write-Host " (" -NoNewline
-            $out = Start-Job -ScriptBlock {
-                $fullName = [System.Web.HttpUtility]::UrlEncode($using:nextAvailable.FullName)
-                $body = @{ Install = $true } | ConvertTo-Json
-                $lbc = $using:bc; $lpatchSettings = $using:patchSettings;
-                irm "$lbc/BroadcasterUpdate/FullName=$fullName" -Body $body @lpatchSettings
-            }
-            $tick = $true
+            Write-Host " " -NoNewline
             while ($true) {
-                if ($tick) {
-                    Write-Host ")" -NoNewline
-                }
-                else {
-                    Write-Host "(" -NoNewline
-                }
-                $tick = !$tick
+                Write-Host "." -NoNewline -ForegroundColor Gray
                 $interval = Start-Sleep 2 &
                 try {
                     $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettings -ErrorAction SilentlyContinue)[0].Version
                     if ($currentVersion -eq $nextAvailable.Version) {
-                        if ($tick) {
-                            Write-Host ")" -NoNewline
-                        }
-                        Write-Host " Update complete!" -ForegroundColor Green -NoNewline
+                        Write-Host " Done!" -ForegroundColor Green -NoNewline
                         Write-Host ""
                         break
                     }
