@@ -344,19 +344,33 @@ function Get-WorkstationIds
     $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "*" {
-            return irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings
+            $values = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings
+            [string[]]$ids = $( )
+            foreach ($value in $values) {
+                $ids += $value.WorkstationId
+            }
+            if ($ids.Length -ne 0) {
+                return $ids
+            }
+            Write-Host "Received an empty list"
+            return Get-WorkstationIds
         }
         "list" {
             irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
-            return Get-WorkstationId
+            return Get-WorkstationIds
         }
         "" {
             Write-Host "Invalid workstation ID format"
-            return Get-WorkstationId
+            return Get-WorkstationIds
         }
         "cancel" { return $null }
         default {
-            return $input.Split(',') | % { $_.Trim() }
+            [string[]]$ids = $input.Split(',', [System.StringSplitOptions]::TrimEntries + [System.StringSplitOptions]::RemoveEmptyEntries)
+            if ($ids.Length -ne 0) {
+                return $ids
+            }
+            Write-Host "Received an empty list"
+            return Get-WorkstationIds
         }
     }
 }
@@ -676,12 +690,30 @@ $modifyCommands = @(
     Command = "Reset"
     Description = "Resets one or more POS server databases including closing their day journals"
     Action = {
-        $posUser = Read-Host "> Enter the user name to call the POS-server API with when closing the day journal"
-        $posPassword = Read-Host "> Enter that user's password" -MaskInput
         [string[]]$workstationIds = Get-WorkstationIds
+        Write-Host "> Selected these workstations for reset:"
+        Write-Host ""
+        $workstationIds | Out-Host
+        Write-Host ""
+        $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
+        $posUser = $posUser.Trim()
+        if ($posUser -ieq "cancel") {
+            return
+        }
+        $posPassword = Read-Host "> Enter that user's password  or 'cancel' to cancel" -MaskInput
+        $posPassword = $posPassword.Trim();
+        if ($posPassword -ieq "cancel") {
+            return
+        }
+        $confirm = Read-Host "> Ready to reset the selected workstations. Enter 'reset' to reset them now or 'cancel' to cancel"
+        $confirm = $confirm.Trim()
+        if ($confirm -ine "reset") {
+            Write-Host "Aborting reset"
+            return
+        }
         $body = @{ Workstations = $workstationIds; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
         $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 60
-        $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -ExcludeProperty ("Script", "@Type") | Format-Table | Out-Host
+        $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
     }
 }
 @{
