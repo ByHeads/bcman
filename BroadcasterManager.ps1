@@ -106,9 +106,6 @@ if ($nextVersion) {
     Write-Host "update" -ForegroundColor Yellow -NoNewline
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green -NoNewline
-    Write-Host ""
-} else {
-    Write-Host ""
 }
 
 #endregion 
