@@ -79,19 +79,16 @@ $getSettings = @{
     Credential = $credentials
     Headers = @{ Accept = "application/json;raw=true" }
 }
-
 $patchSettings = @{
     Method = "PATCH"
     Credential = $credentials
-    Headers = @{ "Content-Type" = "application/json" }
+    Headers = @{ "Content-Type" = "application/json"; Accept = "application/json;raw=true" }
 }
-
 $postSettings = @{
     Method = "POST"
     Credential = $credentials
-    Headers = @{ "Content-Type" = "application/json" }
+    Headers = @{ "Content-Type" = "application/json"; Accept = "application/json;raw=true" }
 }
-
 $deleteSettings = @{
     Method = "DELETE"
     Credential = $credentials
@@ -339,6 +336,28 @@ function Get-WorkstationId
         }
         "cancel" { return $null }
         default { return $input }
+    }
+}
+
+function Get-WorkstationIds
+{
+    $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
+    switch ( $input.Trim().ToLower()) {
+        "*" {
+            return irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings
+        }
+        "list" {
+            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
+            return Get-WorkstationId
+        }
+        "" {
+            Write-Host "Invalid workstation ID format"
+            return Get-WorkstationId
+        }
+        "cancel" { return $null }
+        default {
+            return $input.Split(',') | % { $_.Trim() }
+        }
     }
 }
 
@@ -653,6 +672,18 @@ $getStatusCommands = @(
 }
 )
 $modifyCommands = @(
+@{
+    Command = "Reset"
+    Description = "Resets one or more POS server databases including closing their day journals"
+    Action = {
+        $posUser = Read-Host "> Enter the user name to call the POS-server API with when closing the day journal"
+        $posPassword = Read-Host "> Enter that user's password" -MaskInput
+        [string[]]$workstationIds = Get-WorkstationIds
+        $body = @{ Workstations = $workstationIds; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
+        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 60
+        $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -ExcludeProperty ("Script", "@Type") | Format-Table | Out-Host
+    }
+}
 @{
     Command = "Deploy"
     Description = "Lists and downloads deployable software versions to the Broadcaster"
