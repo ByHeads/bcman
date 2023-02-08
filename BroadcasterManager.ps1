@@ -72,7 +72,6 @@ function Get-Credentials
 
 $bc = Get-BroadcasterUrl
 $credentials = Get-Credentials
-Write-Host "Broadcaster connection confirmed!" -ForegroundColor "Green"
 
 $getSettings = @{
     Method = "GET"
@@ -94,13 +93,31 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
+Write-Host ""
+$nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0].Version
+Write-Host "Connection: " -NoNewLine
+Write-Host "confirmed" -ForegroundColor Green
+$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettings)[0].Version
+Write-Host "Broadcaster version: " -NoNewline
+Write-Host $version -ForegroundColor Yellow
+
+if ($nextVersion) {
+    Write-Host "Enter "  -NoNewline
+    Write-Host "update" -ForegroundColor Yellow -NoNewline
+    Write-Host " to update to " -NoNewline
+    Write-Host $nextVersion -ForegroundColor Green -NoNewline
+    Write-Host ""
+} else {
+    Write-Host ""
+}
+
 #endregion 
 #region Lib
 
 function Enter-Terminal
 {
     param($terminal)
-    Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor "Yellow"
+    Write-Host "Now entering a Broadcaster terminal. Send 'exit' to return to the Broadcaster Manager" -ForegroundColor Yellow
     $ws = New-Object Net.WebSockets.ClientWebSocket
     $ws.Options.Credentials = $credentials
     $ct = New-Object Threading.CancellationToken($false)
@@ -555,7 +572,7 @@ $getStatusCommands = @(
         if ($nextAvailableVersion) {
             Write-Host $nextAvailableVersion -ForegroundColor Green -NoNewline
             Write-Host " (use " -NoNewline
-            Write-Host "Update" -ForegroundColor Yellow -NoNewline
+            Write-Host "update" -ForegroundColor Yellow -NoNewline
             Write-Host " to update now)"
         }
         else {
