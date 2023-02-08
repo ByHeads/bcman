@@ -829,20 +829,30 @@ $modifyCommands = @(
         if ($response -ieq "update") {
             Write-Host "> Updating Broadcaster to version " -NoNewline
             Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
-            Write-Host " * " -NoNewline
+            Write-Host " (" -NoNewline
             $out = Start-Job -ScriptBlock {
                 $fullName = [System.Web.HttpUtility]::UrlEncode($using:nextAvailable.FullName)
                 $body = @{ Install = $true } | ConvertTo-Json
                 $lbc = $using:bc; $lpatchSettings = $using:patchSettings;
                 irm "$lbc/BroadcasterUpdate/FullName=$fullName" -Body $body @lpatchSettings
             }
+            $tick = $true
             while ($true) {
-                Write-Host "* " -NoNewline
-                $interval = Start-Sleep 3 &
+                if ($tick) {
+                    Write-Host ")" -NoNewline
+                }
+                else {
+                    Write-Host "(" -NoNewline
+                }
+                $tick = !$tick
+                $interval = Start-Sleep 2 &
                 try {
-                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 3 @getSettings -ErrorAction SilentlyContinue)[0].Version
+                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettings -ErrorAction SilentlyContinue)[0].Version
                     if ($currentVersion -eq $nextAvailable.Version) {
-                        Write-Host "Update complete!" -ForegroundColor Green -NoNewline
+                        if ($tick) {
+                            Write-Host ")" -NoNewline
+                        }
+                        Write-Host " Update complete!" -ForegroundColor Green -NoNewline
                         Write-Host ""
                         break
                     }
