@@ -7,7 +7,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
         $env:path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
         Write-Host "Done!"
     }
-    & pwsh.exe -Command { irm 'https://raw.githubusercontent.com/ByHeads/BroadcasterManager/master/BroadcasterManager.ps1' | iex }
+    & pwsh -Command 'irm raw.githubusercontent.com/ByHeads/bcman/main/bcman.ps1 | iex'
     return
 }
 
