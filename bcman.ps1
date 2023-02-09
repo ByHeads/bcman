@@ -18,27 +18,33 @@ Write-Host ""
 
 function Get-BroadcasterUrl
 {
-    $url = Read-Host "> Enter the URL to the Broadcaster"
-    $url = $url.Trim()
-    if (!$url.StartsWith("https://")) {
-        $url = "https://" + $url
+    $input = Read-Host "> Enter the URL or hostname of the Broadcaster"
+    $input = $input.Trim()
+    if ( $input.StartsWith("@")) {
+        $input = $input.SubString(1)
     }
-    if (!$url.EndsWith("/api")) {
-        $url += "/api"
+    elseif (!$input.StartsWith("broadcaster.")) {
+        $input = "broadcaster.$input.heads-api.com"
+    }
+    if (!$input.StartsWith("https://")) {
+        $input = "https://$input"
+    }
+    if (!$input.EndsWith("/api")) {
+        $input += "/api"
     }
     $r = $null
-    if (![System.Uri]::TryCreate($url, 'Absolute', [ref]$r)) {
+    if (![System.Uri]::TryCreate($input, 'Absolute', [ref]$r)) {
         Write-Host "Invalid URI format. Try again."
         return Get-BroadcasterUrl
     }
     try {
-        $options = irm $url -Method "OPTIONS" -TimeoutSec 5
+        $options = irm $input -Method "OPTIONS" -TimeoutSec 5
         if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
-            return $url
+            return $input
         }
     }
     catch { }
-    Write-Host "Found no Broadcaster API responding at $url. Ensure that the URL was input correctly and that the Broadcaster is running"
+    Write-Host "Found no Broadcaster API responding at $input. Ensure that the URL was input correctly and that the Broadcaster is running"
     return Get-BroadcasterUrl
 }
 
