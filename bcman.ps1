@@ -15,7 +15,6 @@ Write-Host ""
 
 #endregion
 #region Setup Broadcaster connection
-
 function Get-BroadcasterUrl
 {
     $input = Read-Host "> Enter the URL or hostname of the Broadcaster"
@@ -99,10 +98,8 @@ if ($nextVersion) {
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green -NoNewline
 }
-
 #endregion 
 #region Lib
-
 function Enter-Terminal
 {
     param($terminal)
@@ -535,9 +532,8 @@ function Get-LaunchSchedule
         }
     }
 }
-
 #endregion
-
+#region Status
 $getStatusCommands = @(
 @{
     Command = "Status"
@@ -691,6 +687,8 @@ $getStatusCommands = @(
     }
 }
 )
+#endregion
+#region Modify
 $modifyCommands = @(
 @{
     Command = "Reset"
@@ -706,8 +704,7 @@ $modifyCommands = @(
         if ($posUser -ieq "cancel") {
             return
         }
-        $posPassword = Read-Host "> Enter that user's password  or 'cancel' to cancel" -MaskInput
-        $posPassword = $posPassword.Trim();
+        $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
         if ($posPassword -ieq "cancel") {
             return
         }
@@ -857,6 +854,8 @@ $modifyCommands = @(
     }
 }
 )
+#endregion
+#region Terminals
 $launchTerminalsCommands = @(
 @{
     Command = "LaunchCommands"
@@ -879,11 +878,13 @@ $launchTerminalsCommands = @(
     Action = { Enter-Terminal (Get-Terminal) }
 }
 )
+#endregion
+#region Other
 $otherCommands = @(
 @{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
 @{ Command = "Exit"; Description = "Closes the Broadcaster Manager"; Action = { Exit } }
 )
-
+#endregion
 #region Read-eval loop
 
 function Write-Commands
