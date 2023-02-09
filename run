@@ -8,4 +8,4 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
         Write-Host "Done!"
     }
 }
-pwsh -Command "irm raw.githubusercontent.com/ByHeads/bcman/main/bcman.ps1 | iex"
+pwsh -Command "irm raw.githubusercontent.com/byheads/bcman/main/bcman.ps1 | iex"
