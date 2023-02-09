@@ -85,8 +85,7 @@ $nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSet
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
 $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettings)[0].Version
-Write-Host "Broadcaster version: " -NoNewline
-Write-Host $version -ForegroundColor Yellow
+Write-Host "Broadcaster version: $version"
 
 if ($nextVersion) {
     Write-Host "Enter "  -NoNewline
