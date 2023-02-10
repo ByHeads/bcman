@@ -96,7 +96,7 @@ if ($nextVersion) {
     Write-Host "Enter "  -NoNewline
     Write-Host "update" -ForegroundColor Yellow -NoNewline
     Write-Host " to update to " -NoNewline
-    Write-Host $nextVersion -ForegroundColor Green -NoNewline
+    Write-Host $nextVersion -ForegroundColor Green
 }
 #endregion 
 #region Lib
