@@ -73,7 +73,7 @@ $getSettings = @{
 $patchSettings = @{
     Method = "PATCH"
     Credential = $credentials
-    Headers = @{ "Content-Type" = "application/json"; Accept = "application/json;raw=true" }
+    Headers = @{ "Content-Type" = "application/json"; Accept = "application/json" }
 }
 $postSettings = @{
     Method = "POST"
