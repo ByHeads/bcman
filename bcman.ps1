@@ -342,6 +342,19 @@ function Get-WorkstationId
     }
 }
 
+function Get-RemoteFolder
+{
+    $input = Read-Host "> Enter a path to a folder on the build output share (e.g. retail/23.1)"
+    switch ( $input.Trim().ToLower()) {
+        "" {
+            Write-Host "Invalid folder format"
+            return Get-RemoteFolder
+        }
+        "cancel" { return $null }
+        default { return $input }
+    }
+}
+
 function Get-WorkstationIds
 {
     $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
@@ -797,6 +810,60 @@ $modifyCommands = @(
         }
         if ($input -ieq "cancel") {
             return
+        }
+    }
+}
+@{
+    Command = "RemoteFolders"
+    Description = "Lists and assigns remote folders on the build output share, from where the BC can deploy client software versions"
+    Action = $remotefolders_c = {
+        $input = Read-Host "> Enter 'list' to list the remote folders, 'add' or 'remove' to edit the list or 'cancel' to cancel"
+        switch ( $input.Trim().ToLower()) {
+            "cancel" { return }
+            "list" {
+                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                if ($folders.Count -eq 0) {
+                    Write-Host "There are no assigned remote directories"
+                } else {
+                    Write-Host ""
+                    $folders | Out-Host
+                    Write-Host ""
+                }
+                & $remotefolders_c
+            }
+            "add" {
+                $folder = Get-RemoteFolder
+                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                $folders += $folder
+                $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
+                $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
+                if ($result.Status -eq "success") {
+                    Write-Host "$folder was added" -ForegroundColor Green
+                } else {
+                    Write-Host "An error occured while adding $folder to the assigned remote folder list"
+                }
+                & $remotefolders_c
+            }
+            "remove" {
+                $folder = Get-RemoteFolder
+                [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                $removed = $folders.Remove($folder)
+                if (!$removed) {
+                    Write-Host "$folder is not an assigned remote folder"
+                    & $remotefolders_c
+                }
+                else {
+                    $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
+                    $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
+                    if ($result.Status -eq "success") {
+                        Write-Host "$folder was removed"  -ForegroundColor Green
+                    } else {
+                        Write-Host "An error occured while removing $folder from the assigned remote folder list"
+                    }
+                }
+                & $remotefolders_c
+            }
+            default { & $remotefolders_c }
         }
     }
 }
