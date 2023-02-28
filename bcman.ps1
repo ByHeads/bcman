@@ -78,6 +78,11 @@ $patchSettings = @{
 $postSettings = @{
     Method = "POST"
     Credential = $credentials
+    Headers = @{ "Content-Type" = "application/json"; Accept = "application/json" }
+}
+$postSettingsRaw = @{
+    Method = "POST"
+    Credential = $credentials
     Headers = @{ "Content-Type" = "application/json"; Accept = "application/json;raw=true" }
 }
 $deleteSettings = @{
@@ -728,7 +733,7 @@ $modifyCommands = @(
             return
         }
         $body = @{ Workstations = $workstationIds; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
-        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 60
+        $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 60
         $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
     }
 }
