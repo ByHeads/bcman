@@ -751,7 +751,7 @@ $modifyCommands = @(
         }
         $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
         $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
-        Write-Host "Attempting to download $softwareProduct $version to the Broadcaster. Be patient..."
+        Write-Host "Downloading $softwareProduct $version to the Broadcaster. Be patient..."
         $body = @{ Deploy = $true } | ConvertTo-Json
         $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
         if ($result.Status -eq "success") {
