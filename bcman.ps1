@@ -404,14 +404,16 @@ function Get-DeployableSoftwareProductVersion
     $input = $input.Trim()
     if ($input -ieq "list") {
         Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
-        $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
+        $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct&SoftwareItemType=DeployScript/order_asc=CreatedUTC&select=Version,CreatedUtc&distinct=true" @getSettings
         if ($versions.Count -eq 0) {
             Write-Host "Found no deployable versions of $softwareProduct"
         }
         else {
             Write-Host ""
             foreach ($v in $versions) {
-                Write-Host $v.Version
+                $version = $v.Version
+                $buildTime = $v.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
+                Write-Host "$version  ($buildTime UTC)"
             }
             Write-Host ""
         }
@@ -478,8 +480,11 @@ function Get-RuntimeId
 
 function Get-DateTime
 {
-    $input = Read-Host "> Enter date and time (UTC) for the launch or 'cancel' to cancel. Example: 2023-05-01 12:15"
+    $input = Read-Host "> Enter date and time (UTC) for the launch, press enter for now or 'cancel' to cancel. Example: 2023-05-01 12:15"
     $input = $input.Trim()
+    if ($input -ieq "") {
+        return Get-Date -AsUTC
+    }
     if ($input -ieq "cancel") {
         return $null
     }
@@ -527,12 +532,14 @@ function Get-LaunchSchedule
                         $productName = $item.ProductName
                         $version = $item.Version
                         $runtimeId = $item.RuntimeId
-                        $dateTicks = $item.DateTime.Ticks
+                        $dateTicks = $item."DateTime (UTC)".Ticks
                         $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId&DateTime.Ticks=$dateTicks/unsafe=true" @deleteSettings
                         if ($result.status -eq "success") {
                             if ($result.DeletedCount -gt 0) {
                                 Write-Host "Successfully deleted scheduled launch with Id $input"
                                 Start-Sleep -Seconds 1
+                            } else {
+                                Write-Host "An error occured while trying to delete scheduled launch with Id $input"
                             }
                         }
                         else {
