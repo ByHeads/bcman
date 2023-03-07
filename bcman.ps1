@@ -18,7 +18,7 @@ Write-Host ""
 function Get-BroadcasterUrl
 {
     $input = Read-Host "> Enter the URL or hostname of the Broadcaster"
-    $input = $input.Trim().Split("https://");
+    $input = $input.Trim().Split("https://")
     $input = $input[1] ?? $input[0]
     if ( $input.StartsWith("@")) {
         $input = $input.SubString(1)
