@@ -720,6 +720,8 @@ $modifyCommands = @(
     Command = "Reset"
     Description = "Resets one or more POS server databases including closing their day journals"
     Action = {
+        Write-Host "> This feature has not been tested and might not work as expected. Press enter to confirm and continue" -ForegroundColor Red
+        Read-Host
         [string[]]$workstationIds = Get-WorkstationIds
         Write-Host "> Selected these workstations for reset:"
         Write-Host ""
