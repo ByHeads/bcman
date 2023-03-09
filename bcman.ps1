@@ -66,10 +66,15 @@ function Get-Credentials
 $bc = Get-BroadcasterUrl
 $credentials = Get-Credentials
 
-$getSettings = @{
+$getSettingsRaw = @{
     Method = "GET"
     Credential = $credentials
     Headers = @{ Accept = "application/json;raw=true" }
+}
+$getSettings = @{
+    Method = "GET"
+    Credential = $credentials
+    Headers = @{ Accept = "application/json" }
 }
 $patchSettings = @{
     Method = "PATCH"
@@ -92,10 +97,10 @@ $deleteSettings = @{
 }
 
 Write-Host ""
-$nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0].Version
+$nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
-$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettings)[0].Version
+$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
 Write-Host "Broadcaster version: $version"
 
 if ($nextVersion) {
@@ -167,7 +172,7 @@ function Get-Terminal
 {
     $input = Read-Host "> Enter the name of the terminal, or 'list' to list all terminals"
     if ($input -ieq "list") {
-        irm "$bc/AvailableResource/Kind=TerminalResource/select=Name" @getSettings | Out-Host
+        irm "$bc/AvailableResource/Kind=TerminalResource/select=Name" @getSettingsRaw | Out-Host
         return Get-Terminal
     }
     $input = $input.Trim()
@@ -216,7 +221,7 @@ function Get-SoftwareProduct
 function Create-WorkstationGroup
 {
     $name = Read-Host "> Enter a name for the new workstation group"
-    $existingGroups = irm "$bc/WorkstationGroups" @getSettings | Select-Object -first 1
+    $existingGroups = irm "$bc/WorkstationGroups" @getSettingsRaw | Select-Object -first 1
     $groupExists = [bool]($existingGroups.PSobject.Properties.name -match $name)
     if ($groupExists) {
         Write-Host "A group with name $name already exists"
@@ -231,7 +236,7 @@ function Get-WorkstationGroup
     switch ( $input.Trim()) {
         "list" {
             Write-Host ""
-            $groups = irm "$bc/WorkstationGroups" @getSettings | Select-Object -first 1
+            $groups = irm "$bc/WorkstationGroups" @getSettingsRaw | Select-Object -first 1
             $groups | Get-Member -MemberType NoteProperty | ForEach-Object {
                 $_.Name | Out-Host
             }
@@ -251,7 +256,7 @@ function Get-WorkstationGroup
 function Get-WorkstationGroupMembers
 {
     param($group)
-    return (irm "$bc/WorkstationGroups/_/select=$group" @getSettings)[0].$group
+    return (irm "$bc/WorkstationGroups/_/select=$group" @getSettingsRaw)[0].$group
 }
 
 function Add-WorkstationGroupMember
@@ -336,7 +341,7 @@ function Get-WorkstationId
     $input = Read-Host "> Enter workstation ID, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "list" {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
+            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | Out-Host
             return Get-WorkstationId
         }
         "" {
@@ -366,7 +371,7 @@ function Get-WorkstationIds
     $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "*" {
-            $values = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings
+            $values = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw
             [string[]]$ids = $( )
             foreach ($value in $values) {
                 $ids += $value.WorkstationId
@@ -378,7 +383,7 @@ function Get-WorkstationIds
             return Get-WorkstationIds
         }
         "list" {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettings | Out-Host
+            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | Out-Host
             return Get-WorkstationIds
         }
         "" {
@@ -406,17 +411,22 @@ function Get-DeployableSoftwareProductVersion
     if ($input -ieq "list") {
         Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
         $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct&SoftwareItemType=DeployScript/order_asc=CreatedUTC&select=Version,CreatedUtc&distinct=true" @getSettings
-        if ($versions.Count -eq 0) {
-            Write-Host "Found no deployable versions of $softwareProduct"
+        if ($versions.status -eq "success") {
+            if ($versions.DataCount -eq 0) {
+                Write-Host "Found no deployable versions of $softwareProduct"
+            }
+            else {
+                $versions.data | % {
+                    [pscustomobject]@{
+                        Version = $_.Version.ToString()
+                        "Build time (UTC)" = $_.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
+                    }
+                } | Out-Host
+            }
         }
         else {
-            Write-Host ""
-            foreach ($v in $versions) {
-                $version = $v.Version
-                $buildTime = $v.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
-                Write-Host "$version  ($buildTime UTC)"
-            }
-            Write-Host ""
+            Write-Host $versions.message
+            Write-Host "An error occured while getting the deployable versions list for $softwareProduct. Please try again"
         }
         return Get-DeployableSoftwareProductVersion $softwareProduct
     }
@@ -438,7 +448,7 @@ function Get-LaunchableSoftwareProductVersion
     $input = Read-Host $message
     $input = $input.Trim()
     if ($input -ieq "list") {
-        $versions = irm "$bc/File/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettings
+        $versions = irm "$bc/File/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettingsRaw
         if ($versions.Count -eq 0) {
             Write-Host "Found no launchable versions of $softwareProduct"
         }
@@ -501,7 +511,7 @@ function Get-DateTime
 
 function Get-LaunchSchedule
 {
-    $launches = irm "$bc/LaunchSchedule" @getSettings
+    $launches = irm "$bc/LaunchSchedule" @getSettingsRaw
     if ($launches.Count -eq 0) {
         Write-Host "Found no scheduled lauches"
     }
@@ -565,9 +575,9 @@ $getStatusCommands = @(
     Command = "Status"
     Description = "Prints a status overview of the Broadcaster"
     Action = {
-        $config = (irm "$bc/Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version,COMPUTERNAME->ComputerName" @getSettings)[0]
-        $receiverCount = (irm "$bc/Receiver" @getSettings).Count
-        $nextAvailableVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0].Version
+        $config = (irm "$bc/Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version,COMPUTERNAME->ComputerName" @getSettingsRaw)[0]
+        $receiverCount = (irm "$bc/Receiver" @getSettingsRaw).Count
+        $nextAvailableVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
         Write-Host ""
         Write-Host "Host" -ForegroundColor Yellow
         Write-Host ""
@@ -596,7 +606,7 @@ $getStatusCommands = @(
     Command = "ReceiverStatus"
     Description = "Prints the status for all connected Receivers"
     Action = {
-        $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettings
+        $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettingsRaw
         if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
         else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
     }
@@ -605,7 +615,7 @@ $getStatusCommands = @(
     Command = "ReceiverLog"
     Description = "Prints the last recorded status for all connected and disconnected Receivers"
     Action = {
-        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettings
+        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettingsRaw
         if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
         else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
     }
@@ -614,14 +624,14 @@ $getStatusCommands = @(
     Command = "Config"
     Description = "Prints the configuration of the Broadcaster"
     Action = {
-        irm "$bc/Config" @getSettings | Out-Host
+        irm "$bc/Config" @getSettingsRaw | Out-Host
     }
 }
 @{
     Command = "DeploymentInfo"
     Description = "Prints details about deployed software versions on the Broadcaster"
     Action = {
-        $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettings
+        $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettingsRaw
         if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
         else { $list | Sort-Object -Property "ProductName" | Out-Host }
     }
@@ -634,7 +644,7 @@ $getStatusCommands = @(
         if (!$softwareProduct) {
             return
         }
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettings
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
@@ -659,7 +669,7 @@ $getStatusCommands = @(
     Command = "ReplicationInfo"
     Description = "Prints details about a the replication status of Receivers"
     Action = {
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettings
+        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
@@ -684,7 +694,7 @@ $getStatusCommands = @(
         if (!$workstationId) {
             return
         }
-        $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettings | Select-Object -first 1
+        $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettingsRaw | Select-Object -first 1
         if (!$response) {
             Write-Host "Found no Receiver with workstation ID $workstationId"
             & $receiverDetails_c
@@ -836,7 +846,7 @@ $modifyCommands = @(
         switch ( $input.Trim().ToLower()) {
             "cancel" { return }
             "list" {
-                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
                 if ($folders.Count -eq 0) {
                     Write-Host "There are no assigned remote directories"
                 } else {
@@ -848,7 +858,7 @@ $modifyCommands = @(
             }
             "add" {
                 $folder = Get-RemoteFolder
-                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
                 $folders += $folder
                 $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
                 $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
@@ -861,7 +871,7 @@ $modifyCommands = @(
             }
             "remove" {
                 $folder = Get-RemoteFolder
-                [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettings).RemoteDirectories
+                [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
                 $removed = $folders.Remove($folder)
                 if (!$removed) {
                     Write-Host "$folder is not an assigned remote folder"
@@ -898,8 +908,8 @@ $modifyCommands = @(
     Command = "Update"
     Description = "Updates the Broadcaster to a new version"
     Action = {
-        $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettings)[0].Version
-        $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettings)[0]
+        $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
+        $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
         if (!$nextAvailable) {
             Write-Host "> This Broadcaster is already running the latest version " -NoNewline
             Write-Host $version -ForegroundColor Green -NoNewline
@@ -922,7 +932,7 @@ $modifyCommands = @(
                 Write-Host "." -NoNewline -ForegroundColor Gray
                 $interval = Start-Sleep 2 &
                 try {
-                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettings -ErrorAction SilentlyContinue)[0].Version
+                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
                     if ($currentVersion -eq $nextAvailable.Version) {
                         Write-Host " Done!" -ForegroundColor Green -NoNewline
                         Write-Host ""
