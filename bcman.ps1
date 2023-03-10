@@ -409,7 +409,6 @@ function Get-DeployableSoftwareProductVersion
     $input = Read-Host $message
     $input = $input.Trim()
     if ($input -ieq "list") {
-        Write-Host "Listing deployable versions of $softwareProduct from the build server. Be patient..."
         $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct&SoftwareItemType=DeployScript/order_asc=CreatedUTC&select=Version,CreatedUtc&distinct=true" @getSettings
         if ($versions.status -eq "success") {
             if ($versions.DataCount -eq 0) {
@@ -419,7 +418,7 @@ function Get-DeployableSoftwareProductVersion
                 $versions.data | % {
                     [pscustomobject]@{
                         Version = $_.Version.ToString()
-                        "Build time (UTC)" = $_.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
+                        "Build time" = $_.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
                     }
                 } | Out-Host
             }
@@ -524,7 +523,7 @@ function Get-LaunchSchedule
                 ProductName = $l.ProductName
                 Version = $l.Version
                 RuntimeId = $l.RuntimeId
-                "DateTime (UTC)" = $l.DateTime
+                DateTime = $l.DateTime
             }
             $i += 1
         }
@@ -543,7 +542,7 @@ function Get-LaunchSchedule
                         $productName = $item.ProductName
                         $version = $item.Version
                         $runtimeId = $item.RuntimeId
-                        $dateTicks = $item."DateTime (UTC)".Ticks
+                        $dateTicks = $item.DateTime.Ticks
                         $result = irm "$bc/LaunchSchedule/ProductName=$productName&Version=$version&RuntimeId=$runtimeId&DateTime.Ticks=$dateTicks/unsafe=true" @deleteSettings
                         if ($result.status -eq "success") {
                             if ($result.DeletedCount -gt 0) {
