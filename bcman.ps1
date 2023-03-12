@@ -994,11 +994,11 @@ function Write-Commands
 function WriteAll-Commands
 {
     Write-Host ""
-    Write-Host "GET STATUS:" -ForegroundColor Yellow
+    Write-Host "STATUS:" -ForegroundColor Yellow
     Write-Commands $getStatusCommands
-    Write-Host "MODIFY BROADCASTER:" -ForegroundColor Yellow
+    Write-Host "MODIFY:" -ForegroundColor Yellow
     Write-Commands $modifyCommands
-    Write-Host "BROADCASTER TERMINALS:" -ForegroundColor Yellow
+    Write-Host "TERMINALS:" -ForegroundColor Yellow
     Write-Commands $launchTerminalsCommands
     Write-Host "OTHER:" -ForegroundColor Yellow
     Write-Commands $otherCommands
