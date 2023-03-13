@@ -111,6 +111,19 @@ if ($nextVersion) {
 }
 #endregion 
 #region Lib
+function Yes
+{
+    param($message)
+    $val = Read-Host "$message (yes/no/cancel)"
+    $val = $val.Trim();
+    if ($val -eq "cancel") { return $null }
+    if ($val -eq "yes") { return $true }
+    if ($val -eq "no") { return $false }
+    if ($val -eq "y") { return $true }
+    if ($val -eq "n") { return $false }
+    Write-Host "Invalid value, expected yes, no or cancel"
+    return Yes $message
+}
 function Enter-Terminal
 {
     param($terminal)
@@ -736,14 +749,20 @@ $modifyCommands = @(
         Write-Host ""
         $workstationIds | Out-Host
         Write-Host ""
-        $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
-        $posUser = $posUser.Trim()
-        if ($posUser -ieq "cancel") {
+        $closeDayJournal = Yes "> Should we close relevant day journals before resetting these workstations?"
+        if ($closeDayJournal -eq $null) {
             return
         }
-        $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
-        if ($posPassword -ieq "cancel") {
-            return
+        if ($closeDayJournal) {
+            $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
+            $posUser = $posUser.Trim()
+            if ($posUser -ieq "cancel") {
+                return
+            }
+            $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
+            if ($posPassword -ieq "cancel") {
+                return
+            }
         }
         $confirm = Read-Host "> Ready to reset the selected workstations. Enter 'reset' to reset them now or 'cancel' to cancel"
         $confirm = $confirm.Trim()
@@ -751,7 +770,7 @@ $modifyCommands = @(
             Write-Host "Aborting reset"
             return
         }
-        $body = @{ Workstations = $workstationIds; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
+        $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
         $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 60
         $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
     }
