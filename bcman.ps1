@@ -115,7 +115,7 @@ function Yes
 {
     param($message)
     $val = Read-Host "$message (yes/no/cancel)"
-    $val = $val.Trim();
+    $val = $val.Trim()
     if ($val -eq "cancel") { return $null }
     if ($val -eq "yes") { return $true }
     if ($val -eq "no") { return $false }
@@ -331,7 +331,7 @@ function Manage-WorkstationGroup
             }
             Manage-WorkstationGroup $group
         }
-        "delete"{
+        "delete" {
             $body = @{ $group = $null } | ConvertTo-Json
             $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
             Write-Host "$group was deleted"
