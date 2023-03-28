@@ -972,7 +972,7 @@ $modifyCommands = @(
         $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
         $response = $response.Trim().ToLower()
         if ($response -ieq "update") {
-            $fullName = [System.Web.HttpUtility]::UrlEncode($nextAvailable.FullName)
+            $fullName = [System.Uri]::EscapeDataString($nextAvailable.FullName)
             $body = @{ Install = $true } | ConvertTo-Json
             $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
             Write-Host "> Updating Broadcaster to version " -NoNewline
