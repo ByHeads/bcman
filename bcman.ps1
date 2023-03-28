@@ -1,6 +1,6 @@
 #region Welcome splash
 
-Write-Host ""
+Write-Host
 Write-Host "                     ___                   __            __         "
 Write-Host "      |\ |\         / _ )_______  ___ ____/ /______ ____/ /____ ____"
 Write-Host "   |\ || || |\     / _  / __/ _ \/ _ ``/ _  / __/ _ ``(_-< __/ -_) __/"
@@ -11,7 +11,7 @@ Write-Host "                /_/  /_/\_,_/_//_/\_,_/\_, /\__/_/                "
 Write-Host "                                      /___/                       "
 Write-Host -NoNewline " To quit at any time, press "
 Write-Host -ForegroundColor:Yellow "Ctrl+C"
-Write-Host ""
+Write-Host
 
 #endregion
 #region Setup Broadcaster connection
@@ -96,7 +96,7 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
-Write-Host ""
+Write-Host
 $nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
@@ -248,12 +248,12 @@ function Get-WorkstationGroup
     $input = Read-Host "> Enter the name of a workstation group, 'list' for available groups, 'new' to create one or 'cancel' to cancel"
     switch ( $input.Trim()) {
         "list" {
-            Write-Host ""
+            Write-Host
             $groups = irm "$bc/WorkstationGroups" @getSettingsRaw | Select-Object -first 1
             $groups | Get-Member -MemberType NoteProperty | ForEach-Object {
                 $_.Name | Out-Host
             }
-            Write-Host ""
+            Write-Host
             return Get-WorkstationGroup
         }
         "new" { return Create-WorkstationGroup }
@@ -325,9 +325,9 @@ function Manage-WorkstationGroup
             if ($members.Count -eq 0) {
                 Write-Host "$group has no members"
             } else {
-                Write-Host ""
+                Write-Host
                 $members | Out-Host
-                Write-Host ""
+                Write-Host
             }
             Manage-WorkstationGroup $group
         }
@@ -465,11 +465,11 @@ function Get-LaunchableSoftwareProductVersion
             Write-Host "Found no launchable versions of $softwareProduct"
         }
         else {
-            Write-Host ""
+            Write-Host
             foreach ($v in $versions) {
                 Write-Host $v.Version
             }
-            Write-Host ""
+            Write-Host
         }
         return Get-LaunchableSoftwareProductVersion $softwareProduct
     }
@@ -622,15 +622,15 @@ $getStatusCommands = @(
         $config = (irm "$bc/Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version,COMPUTERNAME->ComputerName" @getSettingsRaw)[0]
         $receiverCount = (irm "$bc/Receiver" @getSettingsRaw).Count
         $nextAvailableVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
-        Write-Host ""
+        Write-Host
         Write-Host "Host" -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host
         Write-Host "Broadcaster URL: $bc"
         Write-Host "Host computer: $( $config.ComputerName )"
         Write-Host "Connected receivers: $receiverCount"
-        Write-Host ""
+        Write-Host
         Write-Host "Broadcaster version" -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host
         Write-Host "Current version: " -NoNewline
         Write-Host $config.Version
         Write-Host "Latest version: " -NoNewline
@@ -643,7 +643,7 @@ $getStatusCommands = @(
         else {
             Write-Host $config.Version
         }
-        Write-Host ""
+        Write-Host
     }
 }
 @{
@@ -744,10 +744,10 @@ $getStatusCommands = @(
             & $receiverDetails_c
         }
         else {
-            Write-Host ""
+            Write-Host
             $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                 Write-Host ($_.Name + ":") -ForegroundColor Yellow
-                Write-Host ""
+                Write-Host
                 $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
                 $ht = @{ }
                 $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
@@ -760,9 +760,9 @@ $getStatusCommands = @(
                         Write-Host "$key`: $val"
                     }
                 }
-                Write-Host ""
+                Write-Host
             }
-            Write-Host ""
+            Write-Host
         }
     }
 }
@@ -772,15 +772,15 @@ $getStatusCommands = @(
 $modifyCommands = @(
 @{
     Command = "Reset"
-    Description = "Resets one or more POS server databases including closing their day journals"
+    Description = "Resets one or more POS server databases, optionally also closing their day journals"
     Action = {
         Write-Host "> This feature has not been tested and might not work as expected. Press enter to confirm and continue" -ForegroundColor Red
         Read-Host
         [string[]]$workstationIds = Get-WorkstationIds
         Write-Host "> Selected these workstations for reset:"
-        Write-Host ""
+        Write-Host
         $workstationIds | Out-Host
-        Write-Host ""
+        Write-Host
         $closeDayJournal = Yes "> Should we close relevant day journals before resetting these workstations?"
         if ($closeDayJournal -eq $null) {
             return
@@ -900,9 +900,9 @@ $modifyCommands = @(
                 if ($folders.Count -eq 0) {
                     Write-Host "There are no assigned remote directories"
                 } else {
-                    Write-Host ""
+                    Write-Host
                     $folders | Out-Host
-                    Write-Host ""
+                    Write-Host
                 }
                 & $remotefolders_c
             }
@@ -963,7 +963,7 @@ $modifyCommands = @(
         if (!$nextAvailable) {
             Write-Host "> This Broadcaster is already running the latest version " -NoNewline
             Write-Host $version -ForegroundColor Green -NoNewline
-            Write-Host ""
+            Write-Host
             return
         }
         Write-Host "> This Broadcaster is running version $version. A new version " -NoNewline
@@ -985,7 +985,7 @@ $modifyCommands = @(
                     $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
                     if ($currentVersion -eq $nextAvailable.Version) {
                         Write-Host " Done!" -ForegroundColor Green -NoNewline
-                        Write-Host ""
+                        Write-Host
                         break
                     }
                 }
@@ -1044,7 +1044,7 @@ function Write-Commands
 
 function WriteAll-Commands
 {
-    Write-Host ""
+    Write-Host
     Write-Host "STATUS:" -ForegroundColor Yellow
     Write-Commands $getStatusCommands
     Write-Host "MODIFY:" -ForegroundColor Yellow
@@ -1062,9 +1062,9 @@ function Write-HelpInfo
     Write-Host " to print a list of all commands"
 }
 
-Write-Host ""
+Write-Host
 Write-HelpInfo
-Write-Host ""
+Write-Host
 
 $allCommands = $getStatusCommands + $modifyCommands + $launchTerminalsCommands + $otherCommands
 
