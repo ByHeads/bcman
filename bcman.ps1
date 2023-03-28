@@ -503,20 +503,52 @@ function Get-RuntimeId
 
 function Get-DateTime
 {
-    $input = Read-Host "> Enter date and time (UTC) for the launch, press enter for now or 'cancel' to cancel. Example: 2023-05-01 12:15"
+    $input = Read-Host "> Enter date and time for the launch, press enter for now, 'examples' for examples or 'cancel' to cancel"
     $input = $input.Trim()
     if ($input -ieq "") {
         return Get-Date -AsUTC
     }
+    if ($input -ieq "examples") {
+        Write-Host "> The following input formats are accepted (examples):"
+        Write-Host
+        Write-Host "Local time:    " -NoNewline
+        Write-Host "2023-04-30 15:00" -ForegroundColor Yellow
+        Write-Host "UTC time:      " -NoNewline
+        Write-Host "UTC 2023-04-30 13:00" -ForegroundColor Yellow
+        Write-Host "Relative time: " -NoNewline
+        Write-Host "+03:30" -NoNewline -ForegroundColor Yellow
+        Write-Host " (in 3.5 hours)" -ForegroundColor Gray
+        Write-Host
+        $hostname = hostname
+        Write-Host "Local times are expressed in the time-zone of your computer ($hostname)" -ForegroundColor Green
+        return Get-DateTime
+    }
     if ($input -ieq "cancel") {
         return $null
     }
+    if ( $input.StartsWith("+")) {
+        if (!$input.Contains(':')) {
+            $input = $input + ":00"
+        }
+        $timeSpan = [TimeSpan] $input.Substring(1).Trim()
+        return (Get-Date -AsUtc).Add($timeSpan)
+    }
+    $isUtc = $false
+    if ( $input.StartsWith("UTC")) {
+        $isUtc = $true
+        $input = $input.Substring(3).Trim()
+    }
     $dateTime = $null
     try {
-        return Get-Date ([DateTime]$input) -ErrorAction SilentlyContinue
+        if ($isUtc) {
+            # The date is already in UTC, no conversion needed
+            return Get-Date ($input) -Format "yyyy-MM-dd HH:mm"
+        }
+        # The date is not in UTC, convert to UTC using -AsUTC
+        return Get-Date ($input) -AsUTC -Format "yyyy-MM-dd HH:mm"
     }
     catch {
-        Write-Host "Invalid date and time format. Example: 2023-05-01 12:15"
+        Write-Host "Invalid date and time format. Enter 'examples' for examples"
         return Get-DateTime
     }
 }
