@@ -63,6 +63,17 @@ function Get-Credentials
     return Get-Credentials
 }
 
+function Pad
+{
+    param($item)
+    $newItem = [ordered]@{ }
+    $item.PSObject.Properties | % {
+        $name = $_.name
+        $newItem."$name" = $_.value.ToString() + "  "
+    }
+    return [pscustomobject]$newItem
+}
+
 $bc = Get-BroadcasterUrl
 $credentials = Get-Credentials
 
@@ -688,24 +699,21 @@ $getStatusCommands = @(
         if (!$softwareProduct) {
             return
         }
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettingsRaw
+        $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
         }
-        $items = @()
-        foreach ($r in $response) {
-            $items += [pscustomobject]@{
-                WorkstationId = $r.WorkstationId
-                LastActive = $r.LastActive
-                IsInstalled = $r.Product.IsInstalled
-                IsRunning = $r.Product.IsRunning
-                CurrentVersion = $r.Product.CurrentVersion
-                DeployedVersions = $r.Product.DeployedVersions | Sort-Object
-                LaunchedVersion = $r.Product.LaunchedVersion
+        $response | % {
+            [pscustomobject]@{
+                WorkstationId = $_.WorkstationId
+                LastActive = $_.LastActive
+                IsRunning = $_.Product.IsRunning
+                CurrentVersion = $_.Product.CurrentVersion
+                DeployedVersions = $_.Product.DeployedVersions | Join-String -Separator ", "
+                LaunchedVersion = $_.Product.LaunchedVersion
             }
-        }
-        $items | Sort-Object -Property "WorkstationId" | Format-Table | Out-Host
+        } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Format-Table | Out-Host
         & $versionInfo_c
     }
 }
@@ -713,21 +721,19 @@ $getStatusCommands = @(
     Command = "ReplicationInfo"
     Description = "Prints details about a the replication status of Receivers"
     Action = {
-        $response = irm "$bc/ReceiverLog/_/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettingsRaw
+        $response = irm "$bc/ReceiverLog/modules.replication.isactive=true/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
         }
-        $items = @()
-        foreach ($r in $response) {
-            $items += [pscustomobject]@{
-                WorkstationId = $r.WorkstationId
-                LastActive = $r.LastActive
-                ReplicationVersion = $r.Replication.ReplicationVersion
-                AwaitsInitialization = $r.Replication.AwaitsInitialization
+        $response | % {
+            [pscustomobject]@{
+                WorkstationId = $_.WorkstationId
+                LastActive = $_.LastActive
+                ReplicationVersion = $_.Replication.ReplicationVersion
+                AwaitsInitialization = $_.Replication.AwaitsInitialization
             }
-        }
-        $items | Sort-Object -Property "WorkstationId" | Format-Table | Out-Host
+        } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Out-Host
     }
 }
 @{
