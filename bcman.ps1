@@ -69,7 +69,8 @@ function Pad
     $newItem = [ordered]@{ }
     $item.PSObject.Properties | % {
         $name = $_.name
-        $newItem."$name" = $_.value.ToString() + "  "
+        $val = ($_.value -eq $null) ? "" : $_.value.ToString()
+        $newItem."$name" = $val + "  "
     }
     return [pscustomobject]$newItem
 }
