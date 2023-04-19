@@ -877,7 +877,7 @@ $modifyCommands = @(
                 ProductName = $softwareProduct
                 Version = $version.ToString()
                 RuntimeId = $runtimeId
-                DateTime = $datetime
+                DateTime = [datetime]$datetime
             } | ConvertTo-Json
             $result = irm "$bc/LaunchSchedule" -Body $body @postSettings
             if ($result.Status -eq "success") {
