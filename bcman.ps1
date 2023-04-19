@@ -552,6 +552,9 @@ function Get-DateTime
     }
     $dateTime = $null
     try {
+        if ($input.Length -lt 10) {
+            throw ""
+        }
         if ($isUtc) {
             # The date is already in UTC, no conversion needed
             return Get-Date ($input) -Format "yyyy-MM-dd HH:mm"
