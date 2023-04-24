@@ -17,7 +17,9 @@ Write-Host
 #region Setup Broadcaster connection
 function Get-BroadcasterUrl
 {
-    $input = Read-Host "> Enter the URL or hostname of the Broadcaster"
+    param($instr)
+    if ($instr) { $instr = " $instr" }
+    $input = Read-Host "> Enter the URL or hostname of the Broadcaster$instr"
     $input = $input.Trim().Split("https://")
     $input = $input[1] ?? $input[0]
     if ( $input.StartsWith("@")) {
@@ -45,10 +47,10 @@ function Get-BroadcasterUrl
     }
     catch { }
     Write-Host "Found no Broadcaster API responding at $input. Ensure that the URL was input correctly and that the Broadcaster is running"
-    return Get-BroadcasterUrl
+    return Get-BroadcasterUrl $instr
 }
 
-function Get-Credentials
+function Get-ApiKeyCredentials
 {
     $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
     $credentials = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
@@ -60,7 +62,7 @@ function Get-Credentials
     }
     catch { }
     Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
-    return Get-Credentials
+    return Get-ApiKeyCredentials
 }
 
 function Pad
@@ -76,7 +78,7 @@ function Pad
 }
 
 $bc = Get-BroadcasterUrl
-$credentials = Get-Credentials
+$credentials = Get-ApiKeyCredentials
 
 $getSettingsRaw = @{
     Method = "GET"
@@ -135,6 +137,52 @@ function Yes
     if ($val -eq "n") { return $false }
     Write-Host "Invalid value, expected yes, no or cancel"
     return Yes $message
+}
+function Num
+{
+    param($message, $default)
+    $val = Read-Host $message
+    $val = $val.Trim();
+    if ($val -eq '') { return $default }
+    if ($val -as [int]) { return $val }
+    Write-Host "Invalid value, expected a number"
+    return Num $message
+}
+function InvalidFileName
+{
+    param([string]$name)
+    return $name.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ne -1
+}
+function Label
+{
+    param($existing)
+    $label = ""
+    if ($existing) {
+        $label = Read-Host "Enter the unique name of the manual client, e.g. Fynda Testmiljö"
+    } else {
+        $label = Read-Host "Enter a unique name for the manual client, e.g. Fynda Testmiljö"
+    }
+    $label = $label.Trim()
+    if ($label -eq '') {
+        Write-Host "Invalid value, expected a name"
+        return Label $existing
+    }
+    if (InvalidFileName $label) {
+        Write-Host "Invalid value, $label contains characters that are invalid in a file name"
+        return Label $existing
+    }
+    return $label
+}
+function Collation
+{
+    param($message)
+    $val = Read-Host "$message (sv-SE, en-GB or nb-NO)"
+    $val = $val.Trim().ToLower();
+    if ($val -eq "sv-se") { return "sv-SE" }
+    if ($val -eq "en-gb") { return "en-GB" }
+    if ($val -eq "nb-no") { return "nb-NO" }
+    Write-Host "Invalid collation, expected sv-SE, en-GB or nb-NO"
+    return Collation $message
 }
 function Enter-Terminal
 {
@@ -216,7 +264,7 @@ function Get-SoftwareProduct
         "wpfclient" { return "WpfClient" }
         "posserver" { return "PosServer" }
         "elephant" {
-            Write-Host "Sorry, I can't really deploy elephants ¯\_(ツ)_/¯ ... only squirrels, beavers and the occasional hedgehog"
+            Write-Host "Sorry, I can't really work with elephants ¯\_(ツ)_/¯ ... only squirrels, beavers and the occasional hedgehog"
             return Get-SoftwareProduct
         }
         "squirrel" {
@@ -363,15 +411,17 @@ function Manage-WorkstationGroup
 
 function Get-WorkstationId
 {
-    $input = Read-Host "> Enter workstation ID, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
+    param($instr)
+    if ($instr) { $instr = " $instr" }
+    $input = Read-Host "> Enter workstation ID$instr, 'list' to list workstation IDs or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "list" {
             irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | Out-Host
-            return Get-WorkstationId
+            return Get-WorkstationId $instr
         }
         "" {
             Write-Host "Invalid workstation ID format"
-            return Get-WorkstationId
+            return Get-WorkstationId $instr
         }
         "cancel" { return $null }
         default { return $input }
@@ -393,7 +443,7 @@ function Get-RemoteFolder
 
 function Get-WorkstationIds
 {
-    $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' for a list of workstation IDs to choose from or 'cancel' to cancel"
+    $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' to list workstation IDs or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
         "*" {
             $values = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw
@@ -496,10 +546,48 @@ function Get-LaunchableSoftwareProductVersion
     return $r
 }
 
-function Get-RuntimeId
+function Get-LaunchedSoftwareProductVersion
 {
     param($softwareProduct)
-    $message = "> Enter runtime ID for the version to launch, press enter for 'win7-x64' or 'cancel' to cancel"
+    $versions = irm "$bc/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @getSettingsRaw
+    if ($versions.Count -eq 0) {
+        Write-Host "Found no launched versions of $softwareProduct"
+        return $null
+    }
+    $latest = ($versions | select -first 1).Version
+    $message = "> Enter $softwareProduct version to use, 'list' for launched versions of $softwareProduct, enter for latest ($latest) or 'cancel' to cancel"
+    $input = Read-Host $message
+    $input = $input.Trim()
+    if ($input -ieq "") {
+        return $latest
+    }
+    if ($input -ieq "list") {
+        $versions = irm "$bc/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @getSettingsRaw
+        else {
+            Write-Host
+            foreach ($v in $versions) {
+                Write-Host $v.Version
+            }
+            Write-Host
+        }
+        return Get-LaunchedSoftwareProductVersion $softwareProduct
+    }
+    if ($input -ieq "cancel") {
+        return $null
+    }
+    $r = $null
+    if (![System.Version]::TryParse($input, [ref]$r)) {
+        Write-Host "Invalid version format. Try again."
+        return Get-LaunchedSoftwareProductVersion $softwareProduct
+    }
+    return $r
+}
+
+function Get-RuntimeId
+{
+    param($softwareProduct, $instr)
+    if ($instr) { $instr = " $instr" }
+    $message = "> Enter runtime ID for the version$instr, press enter for 'win7-x64' or 'cancel' to cancel"
     $input = Read-Host $message
     $input = $input.Trim()
     if ($input -ieq "") {
@@ -698,12 +786,12 @@ $getStatusCommands = @(
 @{
     Command = "VersionInfo"
     Description = "Prints details about a the installed software on Receivers"
-    Action = $versionInfo_c = {
+    Action = $versioninfo_c = {
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
             return
         }
-        $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true/rename=Modules.$softwareProduct->Product&select=WorkstationId,LastActive,Product" @getSettingsRaw
+        $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
@@ -712,13 +800,35 @@ $getStatusCommands = @(
             [pscustomobject]@{
                 WorkstationId = $_.WorkstationId
                 LastActive = $_.LastActive
-                IsRunning = $_.Product.IsRunning
-                CurrentVersion = $_.Product.CurrentVersion
-                DeployedVersions = $_.Product.DeployedVersions | Join-String -Separator ", "
-                LaunchedVersion = $_.Product.LaunchedVersion
+                IsRunning = $_.Modules.$softwareProduct.IsRunning
+                CurrentVersion = $_.Modules.$softwareProduct.CurrentVersion
+                DeployedVersions = $_.Modules.$softwareProduct.DeployedVersions | Join-String -Separator ", "
+                LaunchedVersion = $_.Modules.$softwareProduct.LaunchedVersion
             }
         } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Format-Table | Out-Host
-        & $versionInfo_c
+        & $versioninfo_c
+    }
+}
+@{
+    Command = "ManualClientInfo"
+    Description = "Prints details about the installed manual WPF clients on Receivers"
+    Action = $manualclientinfo_c = {
+        $response = irm "$bc/ReceiverLog/Modules.WpfClient.ExternalClients.Count>0" @getSettingsRaw
+        if ($response.Count -eq 0) {
+            Write-Host "Found no client computers with installed manual WPF Clients"
+            return
+        }
+        Write-Host
+        foreach ($item in $response) {
+            Write-Host "WorkstationId: $( $item.WorkstationId )"
+            Write-Host "Manual clients:"
+            $item.Modules.WpfClient.ExternalClients | % {
+                Write-Host "  InstallDir: $( $_.InstallDir )"
+                Write-Host "  Version: $( $_.Version )"
+                Write-Host "  IsVersionTracked: $( $_.IsVersionTracked )"
+                Write-Host
+            }
+        }
     }
 }
 @{
@@ -778,8 +888,164 @@ $getStatusCommands = @(
 }
 )
 #endregion
-#region Modify
-$modifyCommands = @(
+#region Remote install
+$remoteDeploymentCommands = @(
+@{
+    Command = "Install"
+    Description = "Installs client software on computers with a connected Receiver"
+    Action = $install_c = {
+        [string[]]$workstationIds = Get-WorkstationIds "for the clients to install software for"
+        if (!$workstationIds) {
+            return
+        }
+        $workstationIds | Out-Host
+        $softwareProduct = Get-SoftwareProduct
+        if (!$softwareProduct) {
+            return
+        }
+        $version = Get-LaunchedSoftwareProductVersion $softwareProduct
+        if (!$version) {
+            return
+        }
+        $runtimeId = Get-RuntimeId "to install"
+        if (!$runtimeId) {
+            return
+        }
+        $pms = @{ }
+        $data = @{
+            Workstations = $workstationIds
+            Product = $softwareProduct
+            Version = $version
+            Runtime = $runtimeId
+            Parameters = $pms
+        }
+        switch ($softwareProduct) {
+            "WpfClient" {
+                if (Yes "> Install as a manual client?") {
+                    $data.BroadcasterUrl = Get-BroadcasterUrl "to get the manual client from"
+                    $data.InstallToken = Read-Host "> Enter the install token to use" -MaskInput
+                    $label = Label
+                    $pms.shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
+                    $pms.installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
+                }
+                $pms.usePosServer = (Yes "> Connect client to local POS Server?")
+                $pms.useArchiveServer = (Yes "> Connect client to central Archive Server?")
+            }
+            "PosServer" {
+                $pms.createDump = (Yes "> Create a dump of an existing POS-server?")
+                $pms.collation = (Collation "> Enter database collation, e.g. sv-SE")
+                $pms.imageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
+                $pms.logSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
+            }
+            default {
+                Write-Host "Can't remote-install $softwareProduct"
+                & $install_c
+                return
+            }
+        }
+        $body = $data | ConvertTo-Json
+        Write-Host "> This will install $softwareProduct on $( $workstationIds.Count ) workstations:"
+        Write-Host $workstationIds
+        if (Yes "> Do you want to proceed?") {
+            Write-Host "Now installing. This could take a while, be patient..."
+        }
+        else {
+            Write-Host "Aborted"
+            return
+        }
+        $result = irm "$bc/RemoteInstall" @postSettings -Body $body
+        if ($result.Status -eq "success") {
+            Write-Host
+            Write-Host "RESULTS:" -ForegroundColor Yellow
+            Write-Host
+            foreach ($item in $result.Data) {
+                $id = $item.ExecutedScript.ExecutedBy
+                if ($id -eq $item.WorkstationId) {
+                    $id = $item.WorkstationId
+                }
+                Write-Host "$id`: " -NoNewline
+                if ($item.ExecutedScript.ExecutedSuccessfully) {
+                    Write-Host "Success" -ForegroundColor Green
+                } else {
+                    Write-Host "Failed" -ForegroundColor Red
+                    Write-Host $item.ExecutedScript.Errors
+                }
+            }
+            Write-Host
+        }
+        else {
+            Write-Host "An error occurred while remote-installing $softwareProduct"
+        }
+        & $install_c
+    }
+}
+@{
+    Command = "Uninstall"
+    Description = "Uninstalls client software on computers with a connected Receiver"
+    Action = $uninstall_c = {
+        [string[]]$workstationIds = Get-WorkstationIds "for the clients to uninstall software for"
+        if (!$workstationIds) {
+            return
+        }
+        $data = @{
+            Workstations = $workstationIds
+        }
+        if (Yes "> Uninstall legacy software?") {
+            $data.Legacy = $true
+        } else {
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
+            }
+            switch ($softwareProduct) {
+                "WpfClient" {
+                    if (Yes "> Uninstall a manual client?") {
+                        $data.ManualClientName = Label
+                    }
+                }
+                "PosServer" { }
+                default {
+                    Write-Host "Can't remote-uninstall $softwareProduct"
+                    & $uninstall_c
+                    return
+                }
+            }
+            $data.Product = $softwareProduct
+        }
+        $body = $data | ConvertTo-Json
+
+        Write-Host "> This will uninstall $( $data.Product ?? "legacy software" ) on $( $data.Workstations.Count ) workstations:"
+        Write-Host $workstationIds
+        if (!(Yes "> Do you want to proceed?")) {
+            Write-Host "Aborted"
+            return
+        }
+        $result = irm "$bc/RemoteUninstall" @postSettings -Body $body
+        if ($result.Status -eq "success") {
+            Write-Host
+            Write-Host "RESULTS:" -ForegroundColor Yellow
+            Write-Host
+            foreach ($item in $result.Data) {
+                $id = $item.ExecutedScript.ExecutedBy
+                if ($id -eq $item.WorkstationId) {
+                    $id = $item.WorkstationId
+                }
+                Write-Host "$id`: " -NoNewline
+                if ($item.ExecutedScript.ExecutedSuccessfully) {
+                    Write-Host "Success" -ForegroundColor Green
+                } else {
+                    Write-Host "Failed" -ForegroundColor Red
+                    Write-Host $item.ExecutedScript.Errors
+                }
+            }
+            Write-Host
+        }
+        else {
+            Write-Host "An error occurred while remote-uninstalling $softwareProduct"
+        }
+        & $uninstall_c
+    }
+}
 @{
     Command = "Reset"
     Description = "Resets one or more POS server databases, optionally also closing their day journals"
@@ -815,6 +1081,29 @@ $modifyCommands = @(
         $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
         $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 60
         $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
+    }
+}
+)
+#endregion
+#region Modify
+$modifyCommands = @(
+@{
+    Command = "Forget"
+    Description = "Removes the Receiver log entry for a given workstation"
+    Action = $forget_c = {
+        $workstationId = Get-WorkstationId "for the client that should be forgotten"
+        if (!$workstationId) {
+            return
+        }
+        $result = irm "$bc/ReceiverLog/WorkstationId=$workstationId" @deleteSettings
+        if ($result.Status -eq "success") {
+            if ($result.DeletedCount -gt 0) {
+                Write-Host "$workstationId was forgotten"
+            }
+            else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
+        }
+        else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
+        & $forget_c
     }
 }
 @{
@@ -868,7 +1157,7 @@ $modifyCommands = @(
             if (!$version) {
                 return
             }
-            $runtimeId = Get-RuntimeId
+            $runtimeId = Get-RuntimeId "to launch"
             if (!$runtimeId) {
                 return
             }
@@ -1059,6 +1348,8 @@ function WriteAll-Commands
     Write-Commands $getStatusCommands
     Write-Host "MODIFY:" -ForegroundColor Yellow
     Write-Commands $modifyCommands
+    Write-Host "REMOTE DEPLOY:" -ForegroundColor Yellow
+    Write-Commands $remoteDeploymentCommands
     Write-Host "TERMINALS:" -ForegroundColor Yellow
     Write-Commands $launchTerminalsCommands
     Write-Host "OTHER:" -ForegroundColor Yellow
@@ -1076,7 +1367,7 @@ Write-Host
 Write-HelpInfo
 Write-Host
 
-$allCommands = $getStatusCommands + $modifyCommands + $launchTerminalsCommands + $otherCommands
+$allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands + $launchTerminalsCommands + $otherCommands
 
 while ($true) {
     $input = Read-Host "> Enter a command"
