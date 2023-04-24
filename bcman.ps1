@@ -116,12 +116,20 @@ Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
 $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
 Write-Host "Broadcaster version: $version"
-
 if ($nextVersion) {
     Write-Host "Enter "  -NoNewline
     Write-Host "update" -ForegroundColor Yellow -NoNewline
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green
+}
+$notificationsResult = irm "$bc/NotificationLog" @getSettings
+if ($notificationsResult.DataCount -gt 0) {
+    Write-Host "There are " -NoNewLine
+    Write-Host $notificationsResult.DataCount -ForegroundColor Yellow -NoNewLine
+    Write-Host "notifications"
+    Write-Host "Enter "
+    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+    Write-Host " to view them"
 }
 #endregion 
 #region Lib
@@ -833,7 +841,7 @@ $getStatusCommands = @(
 }
 @{
     Command = "ReplicationInfo"
-    Description = "Prints details about a the replication status of Receivers"
+    Description = "Prints details about the replication status of Receivers"
     Action = {
         $response = irm "$bc/ReceiverLog/modules.replication.isactive=true/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettingsRaw
         if ($response.Count -eq 0) {
@@ -886,6 +894,26 @@ $getStatusCommands = @(
         }
     }
 }
+@{
+    Command = "Notifications"
+    Description = "Prints details about current Broadcaster notifications"
+    Action = {
+        $response = irm "$bc/NotificationLog" @getSettings
+        if ($response.DataCount -eq 0) {
+            Write-Host "The are currently no notifications. Enjoy your day :)"
+            return
+        }
+        $response.Data | % {
+            [pscustomobject]@{
+                Id = $_.Id
+                Source = $_.Source
+                Message = $_.Message
+                TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
+            }
+        } | % { Pad $_ } | Out-Host
+    }
+}
+
 )
 #endregion
 #region Remote install
