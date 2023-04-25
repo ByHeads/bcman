@@ -112,7 +112,10 @@ $deleteSettings = @{
 
 $nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
 $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
-$notificationsResult = irm "$bc/NotificationLog" @getSettings
+$notificationsResult = $null
+try { $notificationsResult = irm "$bc/NotificationLog" @getSettings }
+catch { }
+
 Write-Host
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
@@ -124,17 +127,19 @@ if ($nextVersion) {
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green
 }
-Write-Host "You have " -NoNewline
-$color = "Green"
-if ($notificationsResult.DataCount -gt 0) {
-    $color = "Red"
-}
-Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
-Write-Host " notifications"
-if ($notificationsResult.DataCount -gt 0) {
-    Write-Host "Enter " -NoNewline
-    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-    Write-Host " to view and manage"
+if ($notificationsResult) {
+    Write-Host "You have " -NoNewline
+    $color = "Green"
+    if ($notificationsResult.DataCount -gt 0) {
+        $color = "Red"
+    }
+    Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
+    Write-Host " notifications"
+    if ($notificationsResult.DataCount -gt 0) {
+        Write-Host "Enter " -NoNewline
+        Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+        Write-Host " to view and manage"
+    }
 }
 
 #endregion 
@@ -759,23 +764,26 @@ $getStatusCommands = @(
             Write-Host $config.Version
         }
         Write-Host
-        Write-Host "Notifications:" -ForegroundColor Yellow
-        Write-Host
-        $notificationsResult = irm "$bc/NotificationLog" @getSettings
-        Write-Host "You have " -NoNewline
-        $color = "Green"
-        if ($notificationsResult.DataCount -gt 0) {
-            $color = "Red"
-        }
-        Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
-        Write-Host " notifications"
-        Write-Host
-        if ($notificationsResult.DataCount -gt 0) {
-            Write-Host "Enter " -NoNewline
-            Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-            Write-Host " to view and manage"
+        try {
+            $notificationsResult = irm "$bc/NotificationLog" @getSettings
+            Write-Host "Notifications:" -ForegroundColor Yellow
             Write-Host
+            Write-Host "You have " -NoNewline
+            $color = "Green"
+            if ($notificationsResult.DataCount -gt 0) {
+                $color = "Red"
+            }
+            Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
+            Write-Host " notifications"
+            Write-Host
+            if ($notificationsResult.DataCount -gt 0) {
+                Write-Host "Enter " -NoNewline
+                Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+                Write-Host " to view and manage"
+                Write-Host
+            }
         }
+        catch { }
     }
 }
 @{
