@@ -123,7 +123,6 @@ if ($nextVersion) {
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green
 }
-Write-Host
 $notificationsResult = irm "$bc/NotificationLog" @getSettings
 Write-Host "You have " -NoNewline
 $color = "Green"
