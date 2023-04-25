@@ -115,22 +115,29 @@ $nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSet
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
 $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
-Write-Host "Broadcaster version: $version"
+Write-Host "Broadcaster version: " -NoNewLine
+Write-Host $version -ForegroundColor Green
 if ($nextVersion) {
     Write-Host "Enter "  -NoNewline
     Write-Host "update" -ForegroundColor Yellow -NoNewline
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green
 }
+Write-Host
 $notificationsResult = irm "$bc/NotificationLog" @getSettings
+Write-Host "You have " -NoNewline
+$color = "Green"
 if ($notificationsResult.DataCount -gt 0) {
-    Write-Host "There are " -NoNewLine
-    Write-Host $notificationsResult.DataCount -ForegroundColor Yellow -NoNewLine
-    Write-Host "notifications"
-    Write-Host "Enter "
-    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-    Write-Host " to view them"
+    $color = "Red"
 }
+Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
+Write-Host " notifications"
+if ($notificationsResult.DataCount -gt 0) {
+    Write-Host "Enter " -NoNewline
+    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+    Write-Host " to view and manage"
+}
+
 #endregion 
 #region Lib
 function Yes
@@ -571,13 +578,11 @@ function Get-LaunchedSoftwareProductVersion
     }
     if ($input -ieq "list") {
         $versions = irm "$bc/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @getSettingsRaw
-        else {
-            Write-Host
-            foreach ($v in $versions) {
-                Write-Host $v.Version
-            }
-            Write-Host
+        Write-Host
+        foreach ($v in $versions) {
+            Write-Host $v.Version
         }
+        Write-Host
         return Get-LaunchedSoftwareProductVersion $softwareProduct
     }
     if ($input -ieq "cancel") {
@@ -755,6 +760,23 @@ $getStatusCommands = @(
             Write-Host $config.Version
         }
         Write-Host
+        Write-Host "Notifications:" -ForegroundColor Yellow
+        Write-Host
+        $notificationsResult = irm "$bc/NotificationLog" @getSettings
+        Write-Host "You have " -NoNewline
+        $color = "Green"
+        if ($notificationsResult.DataCount -gt 0) {
+            $color = "Red"
+        }
+        Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
+        Write-Host " notifications"
+        Write-Host
+        if ($notificationsResult.DataCount -gt 0) {
+            Write-Host "Enter " -NoNewline
+            Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+            Write-Host " to view and manage"
+            Write-Host
+        }
     }
 }
 @{
@@ -884,43 +906,77 @@ $getStatusCommands = @(
                 }
                 else {
                     foreach ($key in $ht.Keys | Sort-Object) {
-                        $val = $ht[$key] | ConvertTo-Json
-                        Write-Host "$key`: $val"
+                        $id = $ht[$key] | ConvertTo-Json
+                        Write-Host "$key`: $id"
                     }
                 }
                 Write-Host
             }
-            Write-Host
         }
     }
 }
 @{
     Command = "Notifications"
     Description = "Prints details about current Broadcaster notifications"
-    Action = {
+    Action = $notifications_c = {
         $response = irm "$bc/NotificationLog" @getSettings
         if ($response.DataCount -eq 0) {
             Write-Host "The are currently no notifications. Enjoy your day :)"
             return
         }
-        $response.Data | % {
+        $numId = 0
+        [pscustomobject[]]$notifications = $response.Data | % {
             [pscustomobject]@{
-                Id = $_.Id
+                Id = ($numId += 1)
                 Source = $_.Source
                 Message = $_.Message
                 TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
+                Hash = $_.Id
             }
-        } | % { Pad $_ } | Out-Host
+        }
+        $notifications | % { Pad $_ } | Format-Table | Out-Host
+        $id = Read-Host "> Enter the ID of a notification to clear it, or enter to continue"
+        $id = $id.Trim() -as [int]
+        if ($id -gt 0) {
+            $match = $notifications | ? { $_.Id -eq $id }
+            if (!$match) {
+                Write-Host "Found no notification with ID $id"
+            }
+            else {
+                # The hash is used as ID on the Broadcaster
+                $result = irm "$bc/NotificationLog/Id=$( $match.Hash )" @deleteSettings
+                if ($result.Status -eq "success") {
+                    Write-Host "Notification cleared"
+                } else {
+                    Write-Host "An error occurred while clearing notification with ID $id"
+                }
+                sleep 0.3
+            }
+            & $notifications_c
+        }
     }
 }
 
 )
 #endregion
-#region Remote install
+#region Remote deployment
 $remoteDeploymentCommands = @(
 @{
+    Command = "ISM"
+    Description = "Starts Install Script Maker"
+    Action = {
+        Write-Host "Now starting ISM. Use " -NoNewLine
+        Write-Host -ForegroundColor:Yellow "Ctrl+C" -NoNewLine
+        Write-Host " to return to Broadcaster Manager"
+        irm raw.githubusercontent.com/byheads/util/main/ism | iex
+        Write-Host
+        Write-Host "Returning to Broadcaster Manager..."
+        Write-Host
+    }
+}
+@{
     Command = "Install"
-    Description = "Installs client software on computers with a connected Receiver"
+    Description = "Install or reinstall software on client computers through the Receiver"
     Action = $install_c = {
         [string[]]$workstationIds = Get-WorkstationIds "for the clients to install software for"
         if (!$workstationIds) {
@@ -1009,7 +1065,7 @@ $remoteDeploymentCommands = @(
 }
 @{
     Command = "Uninstall"
-    Description = "Uninstalls client software on computers with a connected Receiver"
+    Description = "Uninstall software on client computers through the Receiver"
     Action = $uninstall_c = {
         [string[]]$workstationIds = Get-WorkstationIds "for the clients to uninstall software for"
         if (!$workstationIds) {
@@ -1109,6 +1165,78 @@ $remoteDeploymentCommands = @(
         $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
         $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 60
         $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
+    }
+}
+@{
+    Command = "Control"
+    Description = "Start or stop services and applications on client computers"
+    Action = $control_c = {
+        Write-Host "This command can do the following:"
+        Write-Host "Start" -ForegroundColor Yellow -NoNewline
+        Write-Host " POS Servers if not already running"
+        Write-Host "Stop" -ForegroundColor Yellow -NoNewline
+        Write-Host " POS Servers and WPF Clients"
+        Write-Host "Restart" -ForegroundColor Yellow -NoNewline
+        Write-Host " running Receivers and POS Servers"
+
+        $command = Read-Host "> Enter a remote command: 'start', 'stop' or 'restart' or 'cancel' to cancel"
+        $command = $command.Trim()
+        if ($command -ieq "cancel") {
+            return
+        }
+        if (!($command -in "start", "stop", "restart")) {
+            Write-Host "Invalid remote command '$command'"
+            & $control_c
+            return
+        }
+        $softwareProduct = Get-SoftwareProduct
+        if (!$softwareProduct) {
+            return
+        }
+        [string[]]$workstationIds = Get-WorkstationIds "for the clients to control"
+        if (!$workstationIds) {
+            return
+        }
+        $workstationIds | Out-Host
+        $data = @{
+            Workstations = $workstationIds
+            Command = $command
+            Product = $softwareProduct
+        }
+        $body = $data | ConvertTo-Json
+        Write-Host "> This will $command $softwareProduct on $( $workstationIds.Count ) workstations:"
+        Write-Host $workstationIds
+        if (Yes "> Do you want to proceed?") {
+            Write-Host "Running command. This could take a while, be patient..."
+        }
+        else {
+            Write-Host "Aborted"
+            return
+        }
+        $result = irm "$bc/RemoteControl" @postSettings -Body $body
+        if ($result.Status -eq "success") {
+            Write-Host
+            Write-Host "RESULTS:" -ForegroundColor Yellow
+            Write-Host
+            foreach ($item in $result.Data) {
+                $id = $item.ExecutedScript.ExecutedBy
+                if ($id -eq $item.WorkstationId) {
+                    $id = $item.WorkstationId
+                }
+                Write-Host "$id`: " -NoNewline
+                if ($item.ExecutedScript.ExecutedSuccessfully) {
+                    Write-Host "Success" -ForegroundColor Green
+                } else {
+                    Write-Host "Failed" -ForegroundColor Red
+                    Write-Host $item.ExecutedScript.Errors
+                }
+            }
+            Write-Host
+        }
+        else {
+            Write-Host "An error occurred while remote-controlling the clients"
+        }
+        & $control_c
     }
 }
 )
@@ -1288,11 +1416,13 @@ $modifyCommands = @(
         $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
         $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
         if (!$nextAvailable) {
+            Write-Host
             Write-Host "> This Broadcaster is already running the latest version " -NoNewline
             Write-Host $version -ForegroundColor Green -NoNewline
             Write-Host
             return
         }
+        Write-Host
         Write-Host "> This Broadcaster is running version $version. A new version " -NoNewline
         Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
         Write-Host " is available"
@@ -1352,6 +1482,52 @@ $launchTerminalsCommands = @(
 $otherCommands = @(
 @{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
 @{ Command = "Exit"; Description = "Closes the Broadcaster Manager"; Action = { Exit } }
+@{
+    Command = "Fireworks"
+    Description = "Perfect for various celebrations"
+    Action = {
+        Write-Host
+        Write-Host "3" -ForegroundColor Red
+        Start-Sleep 1
+        Write-Host "2" -ForegroundColor Yellow
+        Start-Sleep 1
+        Write-Host "1" -ForegroundColor Green
+        Start-Sleep 1
+        Write-Host
+        Write-Host "               *    *" -ForegroundColor Red
+        Write-Host "   *         `'       *       .  *   `'     .           * *" -ForegroundColor Yellow
+        Write-Host "                                                               `'" -ForegroundColor Red
+        Write-Host "       *                *`'          *          *        `'" -ForegroundColor Green
+        Write-Host "   .           *               |               /" -ForegroundColor Red
+        Write-Host "               `'.         |    |      `'       |   `'     *" -ForegroundColor Yellow
+        Write-Host "                 \*        \   \             /" -ForegroundColor Green
+        Write-Host "       `'          \     `'* |    |  *        |*                *  *" -ForegroundColor Red
+        Write-Host "            *      ``.       \   |     *     /    *      `'" -ForegroundColor Blue
+        Write-Host "  .                  \      |   \          /               *" -ForegroundColor Yellow
+        Write-Host "     *`'  *     `'      \      \   `'.       |" -ForegroundColor Red
+        Write-Host "        -._            ``                  /         *" -ForegroundColor Blue
+        Write-Host "  `' `'      ````._   *                           `'          .      `'" -ForegroundColor Green
+        Write-Host "   *           *\*          * .   .      *" -ForegroundColor Yellow
+        Write-Host "*  `'        *    ``-._                       .         _..:=`'        *" -ForegroundColor Red
+        Write-Host "             .  `'      *       *    *   .       _.:--`'" -ForegroundColor Blue
+        Write-Host "          *           .     .     *         .-`'         *" -ForegroundColor Green
+        Write-Host "   .               `'             . `'   *           *         ." -ForegroundColor Red
+        Write-Host "  *       ___.-=--..-._     *                `'               `'" -ForegroundColor Yellow
+        Write-Host "                                  *       *" -ForegroundColor Red
+        Write-Host "                *        _.`'  .`'       ``.        `'  *             *" -ForegroundColor Blue
+        Write-Host "     *              *_.-`'   .`'            ``.               *" -ForegroundColor Green
+        Write-Host "                   .`'                       ``._             *  `'" -ForegroundColor Yellow
+        Write-Host "   `'       `'                        .       .  ``.     ." -ForegroundColor Green
+        Write-Host "       .                      *                  ``" -ForegroundColor Blue
+        Write-Host "               *        `'             `'                          ." -ForegroundColor Red
+        Write-Host "     .                          *        .           *  *" -ForegroundColor Yellow
+        Write-Host "             *        .                                    `'" -ForegroundColor Green
+        Start-Sleep 1
+        Write-Host
+        Write-Host "OK, that's it. Back to work!"
+        Write-Host
+    }
+}
 )
 #endregion
 #region Read-eval loop
@@ -1376,7 +1552,7 @@ function WriteAll-Commands
     Write-Commands $getStatusCommands
     Write-Host "MODIFY:" -ForegroundColor Yellow
     Write-Commands $modifyCommands
-    Write-Host "REMOTE DEPLOY:" -ForegroundColor Yellow
+    Write-Host "REMOTE DEPLOYMENT:" -ForegroundColor Yellow
     Write-Commands $remoteDeploymentCommands
     Write-Host "TERMINALS:" -ForegroundColor Yellow
     Write-Commands $launchTerminalsCommands
