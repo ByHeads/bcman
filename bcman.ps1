@@ -110,11 +110,12 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
-Write-Host
 $nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
+$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
+$notificationsResult = irm "$bc/NotificationLog" @getSettings
+Write-Host
 Write-Host "Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
-$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
 Write-Host "Broadcaster version: " -NoNewLine
 Write-Host $version -ForegroundColor Green
 if ($nextVersion) {
@@ -123,7 +124,6 @@ if ($nextVersion) {
     Write-Host " to update to " -NoNewline
     Write-Host $nextVersion -ForegroundColor Green
 }
-$notificationsResult = irm "$bc/NotificationLog" @getSettings
 Write-Host "You have " -NoNewline
 $color = "Green"
 if ($notificationsResult.DataCount -gt 0) {
@@ -1055,11 +1055,12 @@ $remoteDeploymentCommands = @(
                 }
             }
             Write-Host
+            Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
+            Write-Host
         }
         else {
             Write-Host "An error occurred while remote-installing $softwareProduct"
         }
-        & $install_c
     }
 }
 @{
@@ -1122,6 +1123,8 @@ $remoteDeploymentCommands = @(
                 }
             }
             Write-Host
+            Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
+            Write-Host
         }
         else {
             Write-Host "An error occurred while remote-uninstalling $softwareProduct"
@@ -1170,13 +1173,16 @@ $remoteDeploymentCommands = @(
     Command = "Control"
     Description = "Start or stop services and applications on client computers"
     Action = $control_c = {
+        Write-Host
         Write-Host "This command can do the following:"
+        Write-Host
         Write-Host "Start" -ForegroundColor Yellow -NoNewline
         Write-Host " POS Servers if not already running"
         Write-Host "Stop" -ForegroundColor Yellow -NoNewline
         Write-Host " POS Servers and WPF Clients"
         Write-Host "Restart" -ForegroundColor Yellow -NoNewline
         Write-Host " running Receivers and POS Servers"
+        Write-Host
 
         $command = Read-Host "> Enter a remote command: 'start', 'stop' or 'restart' or 'cancel' to cancel"
         $command = $command.Trim()
@@ -1196,7 +1202,6 @@ $remoteDeploymentCommands = @(
         if (!$workstationIds) {
             return
         }
-        $workstationIds | Out-Host
         $data = @{
             Workstations = $workstationIds
             Command = $command
@@ -1235,7 +1240,6 @@ $remoteDeploymentCommands = @(
         else {
             Write-Host "An error occurred while remote-controlling the clients"
         }
-        & $control_c
     }
 }
 )
@@ -1574,6 +1578,9 @@ $allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands 
 
 while ($true) {
     $input = Read-Host "> Enter a command"
+    if ($input -eq "") {
+        continue
+    }
     $command = $input.Trim().ToLower()
     if ($command -ieq "exit") {
         Write-Host "> Exiting..."
