@@ -177,9 +177,9 @@ function Label
     param($existing)
     $label = ""
     if ($existing) {
-        $label = Read-Host "Enter the unique name of the manual client, e.g. Fynda Testmiljö"
+        $label = Read-Host "> Enter the unique name of the manual client, e.g. Fynda Testmiljö"
     } else {
-        $label = Read-Host "Enter a unique name for the manual client, e.g. Fynda Testmiljö"
+        $label = Read-Host "> Enter a unique name for the manual client, e.g. Fynda Testmiljö"
     }
     $label = $label.Trim()
     if ($label -eq '') {
@@ -1013,7 +1013,9 @@ $remoteDeploymentCommands = @(
         switch ($softwareProduct) {
             "WpfClient" {
                 if (Yes "> Install as a manual client?") {
-                    $data.BroadcasterUrl = Get-BroadcasterUrl "to get the manual client from"
+                    $bcUrl = Get-BroadcasterUrl "to get the manual client from"
+                    $bcUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
+                    $data.BroadcasterUrl = $bcUrl
                     $data.InstallToken = Read-Host "> Enter the install token to use" -MaskInput
                     $label = Label
                     $pms.shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
@@ -1092,7 +1094,7 @@ $remoteDeploymentCommands = @(
             switch ($softwareProduct) {
                 "WpfClient" {
                     if (Yes "> Uninstall a manual client?") {
-                        $data.ManualClientName = Label
+                        $data.ManualClientName = Label $true
                     }
                 }
                 "PosServer" { }
