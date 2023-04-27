@@ -53,16 +53,7 @@ function Get-BroadcasterUrl
 function Get-ApiKeyCredentials
 {
     $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
-    $credentials = New-Object System.Management.Automation.PSCredential ("any", $apiKey)
-    try {
-        $result = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5
-        if (($result.Status -eq "success")) {
-            return $credentials
-        }
-    }
-    catch { }
-    Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
-    return Get-ApiKeyCredentials
+    return New-Object System.Management.Automation.PSCredential ("any", $apiKey)
 }
 
 function Pad
@@ -110,35 +101,49 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
-$nextVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
-$version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
-$notificationsResult = $null
-try { $notificationsResult = irm "$bc/NotificationLog" @getSettings }
-catch { }
+$verifyJob = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5 &
+$versionJob = irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -Cr $credentials -He @{ Accept = "application/json;raw=true" } &
+$nextVersionJob = irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" -Cr $credentials -He @{ Accept = "application/json;raw=true" } &
+$notificationsJob = irm "$bc/NotificationLog" -Cr $credentials -He @{ Accept = "application/json" } &
+Get-Job | Wait-Job | Out-Null
+$verify = ($verifyJob | Receive-Job).Status
+if ($verify -ne "success") {
+    Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
+    exit
+}
+$version = ($versionJob | Receive-Job).Version
+$nextVersion = ($nextVersionJob | Receive-Job).Version
+$notificationsResult = $notificationsJob | Receive-Job -ErrorAction SilentlyContinue
+Get-job | Remove-Job
 
 Write-Host
-Write-Host "Connection: " -NoNewLine
+Write-Host "• Connection: " -NoNewLine
 Write-Host "confirmed" -ForegroundColor Green
-Write-Host "Broadcaster version: " -NoNewLine
+Write-Host "• Broadcaster version: " -NoNewLine
 Write-Host $version -ForegroundColor Green
 if ($nextVersion) {
-    Write-Host "Enter "  -NoNewline
+    Write-Host "• A new version: "  -NoNewline
+    Write-Host $nextVersion -ForegroundColor Green -NoNewline
+    Write-Host " is available (see " -NoNewline
     Write-Host "update" -ForegroundColor Yellow -NoNewline
-    Write-Host " to update to " -NoNewline
-    Write-Host $nextVersion -ForegroundColor Green
+    Write-Host ")"
 }
 if ($notificationsResult) {
-    Write-Host "You have " -NoNewline
+    Write-Host "• You have " -NoNewline
     $color = "Green"
     if ($notificationsResult.DataCount -gt 0) {
         $color = "Red"
     }
+    $subject = " notification"
+    if ($notificationsResult.DataCount -gt 1) {
+        $subject = "$subject`s"
+    }
     Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
-    Write-Host " notifications"
+    Write-Host $subject -NoNewline
     if ($notificationsResult.DataCount -gt 0) {
-        Write-Host "Enter " -NoNewline
+        Write-Host " (see " -NoNewline
         Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-        Write-Host " to view and manage"
+        Write-Host ")"
     }
 }
 
@@ -295,6 +300,7 @@ function Get-SoftwareProduct
             return Get-SoftwareProduct
         }
         "beaver" {
+            $global:beaver = $true
             Write-Host "OK, a beaver has been attached to the Broadcaster Manager. Use it with care!"
             return Get-SoftwareProduct
         }
@@ -765,17 +771,16 @@ $getStatusCommands = @(
         }
         Write-Host
         try {
-            $notificationsResult = irm "$bc/NotificationLog" @getSettings
+            $notificationsJob = irm "$bc/NotificationLog" @getSettings
             Write-Host "Notifications:" -ForegroundColor Yellow
             Write-Host
             Write-Host "You have " -NoNewline
             $color = "Green"
-            if ($notificationsResult.DataCount -gt 0) {
+            if ($notificationsJob.DataCount -gt 0) {
                 $color = "Red"
             }
-            Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
+            Write-Host $notificationsJob.DataCount -ForegroundColor $color -NoNewLine
             Write-Host " notifications"
-            Write-Host
             if ($notificationsResult.DataCount -gt 0) {
                 Write-Host "Enter " -NoNewline
                 Write-Host "notifications" -ForegroundColor Yellow -NoNewline
@@ -964,6 +969,39 @@ $getStatusCommands = @(
     }
 }
 
+)
+#endregion
+#region Status
+$dashboardCommands = @(
+@{
+    Command = "DeployDashboard"
+    Description = "Presents a live dashboard of the deployment status of clients"
+    Action = {
+        $softwareProduct = Get-SoftwareProduct
+        if (!$softwareProduct) {
+            return
+        }
+        $num = 0
+        while ($true) {
+            cls
+            Write-Host "> Press R to update, Q to quit"
+
+
+
+            echo ($num += 1)
+
+
+
+            $keyInfo = [Console]::ReadKey($false)
+            if ($keyInfo.Key -eq [ConsoleKey]::Q) {
+                break
+            }
+            if ($keyInfo.Key -ne "r") {
+                continue
+            }
+        }
+    }
+}
 )
 #endregion
 #region Remote deployment
@@ -1429,16 +1467,16 @@ $modifyCommands = @(
         $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
         $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
         if (!$nextAvailable) {
-            Write-Host
             Write-Host "> This Broadcaster is already running the latest version " -NoNewline
             Write-Host $version -ForegroundColor Green -NoNewline
             Write-Host
             return
         }
-        Write-Host
-        Write-Host "> This Broadcaster is running version $version. A new version " -NoNewline
+        Write-Host "> This Broadcaster is running version " -NoNewline
+        Write-Host $version -ForegroundColor Yellow -NoNewline
+        Write-Host ". A new version " -NoNewline
         Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
-        Write-Host " is available"
+        Write-Host " is available!"
         $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
         $response = $response.Trim().ToLower()
         if ($response -ieq "update") {
@@ -1492,20 +1530,76 @@ $launchTerminalsCommands = @(
 )
 #endregion
 #region Other
+$global:fireworks = $false
 $otherCommands = @(
 @{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
-@{ Command = "Exit"; Description = "Closes the Broadcaster Manager"; Action = { Exit } }
+@{
+    Command = "Exit"
+    Description = "Closes the Broadcaster Manager"
+    Action = {
+        if ($global:beaver) {
+            Write-Host "> Detaching beaver. Be patient..."
+            Start-Sleep 3
+            Write-Host "> The beaver has been safely detached"
+        }
+        Write-Host "> Exiting..."
+        Exit
+    }
+}
 @{
     Command = "Fireworks"
     Description = "Perfect for various celebrations"
     Action = {
+        if ($global:fireworks) {
+            Write-Host "Less celebration, more motivation! You've had your fun..."
+            Start-Sleep 1
+            return
+        }
+        $global:fireworks = $true
+        cls
         Write-Host
-        Write-Host "3" -ForegroundColor Red
+        Write-Host
         Start-Sleep 1
-        Write-Host "2" -ForegroundColor Yellow
+        cls
+        Write-Host
+        Write-Host
+        Write-Host "       ####### " -ForegroundColor Red
+        Write-Host "      ##     ##" -ForegroundColor Red
+        Write-Host "             ##" -ForegroundColor Red
+        Write-Host "       ####### " -ForegroundColor Red
+        Write-Host "             ##" -ForegroundColor Red
+        Write-Host "      ##     ##" -ForegroundColor Red
+        Write-Host "       ####### " -ForegroundColor Red
+        Write-Host
+        Write-Host
         Start-Sleep 1
-        Write-Host "1" -ForegroundColor Green
+        cls
+        Write-Host
+        Write-Host
+        Write-Host "       ####### " -ForegroundColor Yellow
+        Write-Host "      ##     ##" -ForegroundColor Yellow
+        Write-Host "             ##" -ForegroundColor Yellow
+        Write-Host "       ####### " -ForegroundColor Yellow
+        Write-Host "      ##       " -ForegroundColor Yellow
+        Write-Host "      ##       " -ForegroundColor Yellow
+        Write-Host "      #########" -ForegroundColor Yellow
+        Write-Host
+        Write-Host
         Start-Sleep 1
+        cls
+        Write-Host
+        Write-Host
+        Write-Host "          ##   " -ForegroundColor Green
+        Write-Host "        ####   " -ForegroundColor Green
+        Write-Host "          ##   " -ForegroundColor Green
+        Write-Host "          ##   " -ForegroundColor Green
+        Write-Host "          ##   " -ForegroundColor Green
+        Write-Host "          ##   " -ForegroundColor Green
+        Write-Host "        ###### " -ForegroundColor Green
+        Write-Host
+        Write-Host
+        Start-Sleep 1
+        cls
         Write-Host
         Write-Host "               *    *" -ForegroundColor Red
         Write-Host "   *         `'       *       .  *   `'     .           * *" -ForegroundColor Yellow
@@ -1535,7 +1629,12 @@ $otherCommands = @(
         Write-Host "               *        `'             `'                          ." -ForegroundColor Red
         Write-Host "     .                          *        .           *  *" -ForegroundColor Yellow
         Write-Host "             *        .                                    `'" -ForegroundColor Green
-        Start-Sleep 1
+        Write-Host
+        if ($global:beaver) {
+            Write-Host "The beaver is going wild!"
+        }
+        Start-Sleep 2
+        cls
         Write-Host
         Write-Host "OK, that's it. Back to work!"
         Write-Host
@@ -1565,6 +1664,8 @@ function WriteAll-Commands
     Write-Commands $getStatusCommands
     Write-Host "MODIFY:" -ForegroundColor Yellow
     Write-Commands $modifyCommands
+    Write-Host "DASHBOARDS:" -ForegroundColor Yellow
+    Write-Commands $dashboardCommands
     Write-Host "REMOTE DEPLOYMENT:" -ForegroundColor Yellow
     Write-Commands $remoteDeploymentCommands
     Write-Host "TERMINALS:" -ForegroundColor Yellow
@@ -1575,35 +1676,18 @@ function WriteAll-Commands
 
 function Write-HelpInfo
 {
-    Write-Host "Enter " -NoNewline
+    Write-Host "• Use " -NoNewline
     Write-Host "help" -NoNewLine -ForegroundColor Yellow
-    Write-Host " to print a list of all commands"
+    Write-Host " to list all commands"
 }
 
-Write-Host
 Write-HelpInfo
 Write-Host
 
-$allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands + $launchTerminalsCommands + $otherCommands
+$allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands + $dashboardCommands + $launchTerminalsCommands + $otherCommands
 
-while ($true) {
-    $input = Read-Host "> Enter a command"
-    if ($input -eq "") {
-        continue
-    }
-    $command = $input.Trim().ToLower()
-    if ($command -ieq "exit") {
-        Write-Host "> Exiting..."
-        Exit
-    }
-    if ($command -ieq "hi" -or $command -ieq "hello") {
-        Write-Host "Well hello there!"
-        continue
-    }
-    if ($command -ieq "help") {
-        WriteAll-Commands
-        continue
-    }
+function Call($command)
+{
     $foundCommand = $false
     foreach ($c in $allCommands) {
         if ($c.Command -ieq $command) {
@@ -1616,6 +1700,23 @@ while ($true) {
         Write-HelpInfo
         Start-Sleep 1
     }
+}
+
+while ($true) {
+    $input = Read-Host "> Enter a command"
+    if ($input -eq "") {
+        continue
+    }
+    $command = $input.Trim().ToLower()
+    if ($command -ieq "hi" -or $command -ieq "hello") {
+        Write-Host "Well hello there!"
+        continue
+    }
+    if ($command -ieq "help") {
+        WriteAll-Commands
+        continue
+    }
+    Call $command
 }
 
 #endregion
