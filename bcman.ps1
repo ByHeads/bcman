@@ -71,6 +71,12 @@ function Pad
 $bc = Get-BroadcasterUrl
 $credentials = Get-ApiKeyCredentials
 
+function irmj
+{
+    param($url, $settings)
+    return irm $url -Method $settings.Method -Credential $settings.Credential -Headers $settings.Headers -TimeoutSec 10 &
+}
+
 $getSettingsRaw = @{
     Method = "GET"
     Credential = $credentials
@@ -101,10 +107,10 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
-$verifyJob = irm "$bc/RESTable.Blank" -Credential $credentials -TimeoutSec 5 &
-$versionJob = irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -Cr $credentials -He @{ Accept = "application/json;raw=true" } &
-$nextVersionJob = irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" -Cr $credentials -He @{ Accept = "application/json;raw=true" } &
-$notificationsJob = irm "$bc/NotificationLog" -Cr $credentials -He @{ Accept = "application/json" } &
+$verifyJob = irmj "$bc/RESTable.Blank" $getSettings
+$versionJob = irmj "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" $getSettingsRaw
+$nextVersionJob = irmj "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" $getSettingsRaw
+$notificationsJob = irmj "$bc/NotificationLog" $getSettings
 Get-Job | Wait-Job | Out-Null
 $verify = ($verifyJob | Receive-Job).Status
 if ($verify -ne "success") {
@@ -196,6 +202,30 @@ function Label
         return Label $existing
     }
     return $label
+}
+function Write-DashboardHeader
+{
+    param($name)
+    Write-Host "### $name`: press " -NoNewline
+    Write-Host "R" -ForegroundColor Yellow -NoNewline
+    Write-Host " to refresh, " -NoNewline
+    Write-Host "Ctrl+C" -ForegroundColor Yellow -NoNewline
+    Write-Host " to quit"
+}
+function Quit-Dashboard
+{
+    $originalMode = [System.Console]::TreatControlCAsInput
+    [System.Console]::TreatControlCAsInput = $true
+    try {
+        while ($true) {
+            $keyInfo = [System.Console]::ReadKey($true)
+            $keyChar = $keyInfo.KeyChar
+            $ctrlC = $keyInfo.Key -eq [System.ConsoleKey]::C -and $keyInfo.Modifiers -eq [System.ConsoleModifiers]::Control
+            if ($ctrlC) { Write-Host "Received Ctrl+C, quitting..."; return $true }
+            if ($keyChar -eq "r") { Write-Host "Updating..."; return $false }
+        }
+    }
+    finally { [System.Console]::TreatControlCAsInput = $originalMode }
 }
 function Collation
 {
@@ -983,22 +1013,19 @@ $dashboardCommands = @(
         }
         $num = 0
         while ($true) {
+            $itemsJob = irmj "$bc/ReceiverLog" $getSettingsRaw
+            $currentVersionsJob = irmj "$bc/LaunchSchedule.CurrentVersions" $getSettingsRaw
+            $deployedVersionsJob = irmj "$bc/File/ProductName=$softwareProduct/select=Version&distinct=true" $getSettingsRaw
+            $itemsJob, $currentVersionsJob, $deployedVersionsJob | Wait-Job | Out-Null
             cls
-            Write-Host "> Press R to update, Q to quit"
 
+            Write-DashboardHeader "DeploymentDashboard"
+            Write-Host
+            echo "Content!" + ( $num++)
+            Write-Host
 
-
-            echo ($num += 1)
-
-
-
-            $keyInfo = [Console]::ReadKey($false)
-            if ($keyInfo.Key -eq [ConsoleKey]::Q) {
-                break
-            }
-            if ($keyInfo.Key -ne "r") {
-                continue
-            }
+            $itemsJob, $currentVersionsJob, $deployedVersionsJob | Remove-Job | Out-Null
+            if (Quit-Dashboard) { return }
         }
     }
 }
@@ -1246,6 +1273,16 @@ $remoteDeploymentCommands = @(
         if (!$softwareProduct) {
             return
         }
+        if ($command -in ("start", "restart") -and $softwareProduct -eq "WpfClient") {
+            Write-Host "Can't start or restart WPF Clients"
+            & $control_c
+            return
+        }
+        if ($command -in ("start", "stop") -and $softwareProduct -eq "Receiver") {
+            Write-Host "Can't start or stop the Receiver"
+            & $control_c
+            return
+        }
         [string[]]$workstationIds = Get-WorkstationIds "for the clients to control"
         if (!$workstationIds) {
             return
@@ -1265,7 +1302,7 @@ $remoteDeploymentCommands = @(
             Write-Host "Aborted"
             return
         }
-        $result = irm "$bc/RemoteControl" @postSettings -Body $body
+        $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue
         if ($result.Status -eq "success") {
             Write-Host
             Write-Host "RESULTS:" -ForegroundColor Yellow
@@ -1304,9 +1341,7 @@ $modifyCommands = @(
         }
         $result = irm "$bc/ReceiverLog/WorkstationId=$workstationId" @deleteSettings
         if ($result.Status -eq "success") {
-            if ($result.DeletedCount -gt 0) {
-                Write-Host "$workstationId was forgotten"
-            }
+            if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
             else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
         }
         else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
@@ -1380,8 +1415,13 @@ $modifyCommands = @(
             } | ConvertTo-Json
             $result = irm "$bc/LaunchSchedule" -Body $body @postSettings
             if ($result.Status -eq "success") {
-                Write-Host "A launch was successfully scheduled"
-                & $launch_c
+                if ($result.DataCount -eq 0) {
+                    Write-Host "No new launch was scheduled. There is likely an earlier launch with the same or a higher version."
+                    & $launch_c
+                } else {
+                    Write-Host "A launch was successfully scheduled"
+                    & $launch_c
+                }
             }
             else {
                 Write-Host "An error occured while scheduling launch"
