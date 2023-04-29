@@ -106,7 +106,9 @@ $deleteSettings = @{
 function Get-Batch
 {
     param($bodyObj)
-    $body = $bodyObj | ConvertTo-Json
+    $body = $null
+    if ($bodyObj -is [string]) { $body = $bodyObj }
+    else { $body = $bodyObj | ConvertTo-Json }
     try {
         return irm "$bc/Aggregator" @postSettingsRaw -Body $body
     }
@@ -186,7 +188,7 @@ function Quit-Dashboard
             $keyChar = $keyInfo.KeyChar
             $ctrlC = $keyInfo.Key -eq [System.ConsoleKey]::C -and $keyInfo.Modifiers -eq [System.ConsoleModifiers]::Control
             if ($ctrlC) { Write-Host "Received Ctrl+C, quitting..."; return $true }
-            if ($keyChar -eq "r") { Write-Host "Updating..."; return $false }
+            if ($keyChar -eq "r") { Write-Host "Refreshing..."; return $false }
         }
     }
     finally { [System.Console]::TreatControlCAsInput = $originalMode }
@@ -978,9 +980,10 @@ $dashboardCommands = @(
             CurrentVersions = "GET /LaunchSchedule.CurrentVersions"
             Files = "GET /File/ProductName=$softwareProduct/select=Version&distinct=true"
         } | ConvertTo-Json
+
         $num = 0
         while ($true) {
-            $job = irm "$bc/Aggregator" @postSettings -Body $body
+            $job = Get-Batch $body
             cls
 
             Write-DashboardHeader "DeploymentDashboard"
