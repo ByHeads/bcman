@@ -71,12 +71,6 @@ function Pad
 $bc = Get-BroadcasterUrl
 $credentials = Get-ApiKeyCredentials
 
-function irmj
-{
-    param($url, $settings)
-    return irm $url -Method $settings.Method -Credential $settings.Credential -Headers $settings.Headers -TimeoutSec 10 &
-}
-
 $getSettingsRaw = @{
     Method = "GET"
     Credential = $credentials
@@ -107,54 +101,24 @@ $deleteSettings = @{
     Credential = $credentials
 }
 
-$verifyJob = irmj "$bc/RESTable.Blank" $getSettings
-$versionJob = irmj "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" $getSettingsRaw
-$nextVersionJob = irmj "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" $getSettingsRaw
-$notificationsJob = irmj "$bc/NotificationLog" $getSettings
-Get-Job | Wait-Job | Out-Null
-$verify = ($verifyJob | Receive-Job).Status
-if ($verify -ne "success") {
-    Write-Host "Invalid API key. Ensure that the key has been given a proper access scope, including the RESTable.* resources"
-    exit
-}
-$version = ($versionJob | Receive-Job).Version
-$nextVersion = ($nextVersionJob | Receive-Job).Version
-$notificationsResult = $notificationsJob | Receive-Job -ErrorAction SilentlyContinue
-Get-job | Remove-Job
-
-Write-Host
-Write-Host "• Connection: " -NoNewLine
-Write-Host "confirmed" -ForegroundColor Green
-Write-Host "• Broadcaster version: " -NoNewLine
-Write-Host $version -ForegroundColor Green
-if ($nextVersion) {
-    Write-Host "• A new version: "  -NoNewline
-    Write-Host $nextVersion -ForegroundColor Green -NoNewline
-    Write-Host " is available (see " -NoNewline
-    Write-Host "update" -ForegroundColor Yellow -NoNewline
-    Write-Host ")"
-}
-if ($notificationsResult) {
-    Write-Host "• You have " -NoNewline
-    $color = "Green"
-    if ($notificationsResult.DataCount -gt 0) {
-        $color = "Red"
-    }
-    $subject = " notification"
-    if ($notificationsResult.DataCount -gt 1) {
-        $subject = "$subject`s"
-    }
-    Write-Host $notificationsResult.DataCount -ForegroundColor $color -NoNewLine
-    Write-Host $subject -NoNewline
-    if ($notificationsResult.DataCount -gt 0) {
-        Write-Host " (see " -NoNewline
-        Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-        Write-Host ")"
-    }
-}
-
 #endregion 
 #region Lib
+function Get-Batch
+{
+    param($bodyObj)
+    $body = $bodyObj | ConvertTo-Json
+    try {
+        return irm "$bc/Aggregator" @postSettingsRaw -Body $body
+    }
+    catch {
+        if ($_.Exception.Response.StatusCode -eq 403) {
+            Write-Host "Invalid API key. Ensure that the key has been given a proper access scope"
+            exit
+        }
+        throw
+    }
+}
+
 function Yes
 {
     param($message)
@@ -775,50 +739,48 @@ $getStatusCommands = @(
     Command = "Status"
     Description = "Prints a status overview of the Broadcaster"
     Action = {
-        $config = (irm "$bc/Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version,COMPUTERNAME->ComputerName" @getSettingsRaw)[0]
-        $receiverCount = (irm "$bc/Receiver" @getSettingsRaw).Count
-        $nextAvailableVersion = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0].Version
-        Write-Host
-        Write-Host "Host" -ForegroundColor Yellow
-        Write-Host
-        Write-Host "Broadcaster URL: $bc"
-        Write-Host "Host computer: $( $config.ComputerName )"
-        Write-Host "Connected receivers: $receiverCount"
-        Write-Host
-        Write-Host "Broadcaster version" -ForegroundColor Yellow
-        Write-Host
-        Write-Host "Current version: " -NoNewline
-        Write-Host $config.Version
-        Write-Host "Latest version: " -NoNewline
-        if ($nextAvailableVersion) {
-            Write-Host $nextAvailableVersion -ForegroundColor Green -NoNewline
-            Write-Host " (use " -NoNewline
-            Write-Host "update" -ForegroundColor Yellow -NoNewline
-            Write-Host " to update now)"
-        }
-        else {
-            Write-Host $config.Version
-        }
-        Write-Host
         try {
-            $notificationsJob = irm "$bc/NotificationLog" @getSettings
-            Write-Host "Notifications:" -ForegroundColor Yellow
+            $results = Get-Batch @{
+                Config = "GET /Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version"
+                NextVersion = "GET /BroadcasterUpdate/_/order_desc=Version&limit=1"
+                Notifications = "GET /NotificationLog"
+            }
+            $version = $results.Config[0].Version
+            $hostName = $results.Config[0].ComputerName
+            $nextVersion = $null
+            $nextVersion = $results.NextVersion | select -First 1 -Exp Version
+            $notifications = $results.Notifications
+
             Write-Host
-            Write-Host "You have " -NoNewline
+            Write-Host "• Connected to: " -NoNewLine
+            Write-Host $hostName -ForegroundColor Green
+            Write-Host "• Broadcaster version: " -NoNewLine
+            Write-Host $version -ForegroundColor Green
+            if ($nextVersion) {
+                Write-Host "• A new version: "  -NoNewline
+                Write-Host $nextVersion -ForegroundColor Green -NoNewline
+                Write-Host " is available (see " -NoNewline
+                Write-Host "update" -ForegroundColor Yellow -NoNewline
+                Write-Host ")"
+            }
+            $notificationsCount = $notifications.Length
+            Write-Host "• You have " -NoNewline
             $color = "Green"
-            if ($notificationsJob.DataCount -gt 0) {
-                $color = "Red"
-            }
-            Write-Host $notificationsJob.DataCount -ForegroundColor $color -NoNewLine
-            Write-Host " notifications"
-            if ($notificationsResult.DataCount -gt 0) {
-                Write-Host "Enter " -NoNewline
+            if ($notificationsCount -gt 0) { $color = "Red" }
+            $subject = " notification"
+            if ($notificationsCount -gt 1) { $subject = "$subject`s" }
+            Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
+            Write-Host $subject -NoNewline
+            if ($notificationsCount -gt 0) {
+                Write-Host " (see " -NoNewline
                 Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-                Write-Host " to view and manage"
-                Write-Host
+                Write-Host ")"
             }
+            Write-Host
         }
-        catch { }
+        catch {
+            Write-Host
+        }
     }
 }
 @{
@@ -1011,12 +973,14 @@ $dashboardCommands = @(
         if (!$softwareProduct) {
             return
         }
+        $body = @{
+            ReceiverLog = "GET /ReceiverLog"
+            CurrentVersions = "GET /LaunchSchedule.CurrentVersions"
+            Files = "GET /File/ProductName=$softwareProduct/select=Version&distinct=true"
+        } | ConvertTo-Json
         $num = 0
         while ($true) {
-            $itemsJob = irmj "$bc/ReceiverLog" $getSettingsRaw
-            $currentVersionsJob = irmj "$bc/LaunchSchedule.CurrentVersions" $getSettingsRaw
-            $deployedVersionsJob = irmj "$bc/File/ProductName=$softwareProduct/select=Version&distinct=true" $getSettingsRaw
-            $itemsJob, $currentVersionsJob, $deployedVersionsJob | Wait-Job | Out-Null
+            $job = irm "$bc/Aggregator" @postSettings -Body $body
             cls
 
             Write-DashboardHeader "DeploymentDashboard"
@@ -1024,7 +988,6 @@ $dashboardCommands = @(
             echo "Content!" + ( $num++)
             Write-Host
 
-            $itemsJob, $currentVersionsJob, $deployedVersionsJob | Remove-Job | Out-Null
             if (Quit-Dashboard) { return }
         }
     }
@@ -1681,9 +1644,6 @@ $otherCommands = @(
     }
 }
 )
-#endregion
-#region Read-eval loop
-
 function Write-Commands
 {
     param($commands)
@@ -1716,13 +1676,10 @@ function WriteAll-Commands
 
 function Write-HelpInfo
 {
-    Write-Host "• Use " -NoNewline
+    Write-Host "> Use " -NoNewline
     Write-Host "help" -NoNewLine -ForegroundColor Yellow
     Write-Host " to list all commands"
 }
-
-Write-HelpInfo
-Write-Host
 
 $allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands + $dashboardCommands + $launchTerminalsCommands + $otherCommands
 
@@ -1741,6 +1698,13 @@ function Call($command)
         Start-Sleep 1
     }
 }
+
+#endregion
+#region Read-eval loop
+
+Call "Status"
+Write-HelpInfo
+Write-Host
 
 while ($true) {
     $input = Read-Host "> Enter a command"
