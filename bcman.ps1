@@ -973,6 +973,8 @@ $dashboardCommands = @(
     Command = "SoftwareDashboard"
     Description = "Presents a live dashboard of the status of clients"
     Action = {
+        Write-Host "This command is under development..."
+        return
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
             return
@@ -985,14 +987,14 @@ $dashboardCommands = @(
 
         $num = 0
         while ($true) {
-            
+
             # Egenskaper att tracka:
             # - En modul åt gången
             # - R (replication), C (receiver), W (wpf client), P (POS Server), 
             # - Har deployat senaste versionen (as defined in /File)
             # - Har launchat senaste launchad version (as defined in /LaunchSchedule)
-            
-            
+
+
             $data = Get-Batch $body
             $listData = $data.ReceiverLog | % {
                 $status = "Up to date"
