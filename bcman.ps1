@@ -173,7 +173,7 @@ function Write-DashboardHeader
 {
     param($name)
     Write-Host "### $name`: press " -NoNewline
-    Write-Host "R" -ForegroundColor Yellow -NoNewline
+    Write-Host "Space" -ForegroundColor Yellow -NoNewline
     Write-Host " to refresh, " -NoNewline
     Write-Host "Ctrl+C" -ForegroundColor Yellow -NoNewline
     Write-Host " to quit"
@@ -188,7 +188,7 @@ function Quit-Dashboard
             $keyChar = $keyInfo.KeyChar
             $ctrlC = $keyInfo.Key -eq [System.ConsoleKey]::C -and $keyInfo.Modifiers -eq [System.ConsoleModifiers]::Control
             if ($ctrlC) { Write-Host "Received Ctrl+C, quitting..."; return $true }
-            if ($keyChar -eq "r") { Write-Host "Refreshing..."; return $false }
+            if ($keyChar -eq " ") { Write-Host "Refreshing..."; return $false }
         }
     }
     finally { [System.Console]::TreatControlCAsInput = $originalMode }
@@ -940,7 +940,7 @@ $getStatusCommands = @(
                 Hash = $_.Id
             }
         }
-        $notifications | % { Pad $_ } | Format-Table | Out-Host
+        $notifications | % { Pad $_ } | Format-Table -AutoSize | Out-Host
         $id = Read-Host "> Enter the ID of a notification to clear it, or enter to continue"
         $id = $id.Trim() -as [int]
         if ($id -gt 0) {
@@ -966,10 +966,12 @@ $getStatusCommands = @(
 )
 #endregion
 #region Status
+#endregion
+#region Dashboarda
 $dashboardCommands = @(
 @{
-    Command = "DeployDashboard"
-    Description = "Presents a live dashboard of the deployment status of clients"
+    Command = "SoftwareDashboard"
+    Description = "Presents a live dashboard of the status of clients"
     Action = {
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
@@ -983,14 +985,29 @@ $dashboardCommands = @(
 
         $num = 0
         while ($true) {
-            $job = Get-Batch $body
+            
+            # Egenskaper att tracka:
+            # - En modul åt gången
+            # - R (replication), C (receiver), W (wpf client), P (POS Server), 
+            # - Har deployat senaste versionen (as defined in /File)
+            # - Har launchat senaste launchad version (as defined in /LaunchSchedule)
+            
+            
+            $data = Get-Batch $body
+            $listData = $data.ReceiverLog | % {
+                $status = "Up to date"
+                [pscustomobject]@{
+                    Status = "`e[32m$status`e[0m"
+                    WorkstationId = $_.WorkstationId
+                    LastActive = $_.LastActive
+                    ReplicationVersion = $_.Replication.ReplicationVersion
+                    AwaitsInitialization = $_.Replication.AwaitsInitialization
+                    Version = $_.Modules.$softwareProduct.Version
+                }
+            }
             cls
-
             Write-DashboardHeader "DeploymentDashboard"
-            Write-Host
-            echo "Content!" + ( $num++)
-            Write-Host
-
+            $listData | % { Pad $_ } | Format-Table | Out-Host
             if (Quit-Dashboard) { return }
         }
     }
