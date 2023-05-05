@@ -871,7 +871,7 @@ $getStatusCommands = @(
     Command = "ReplicationInfo"
     Description = "Prints details about the replication status of Receivers"
     Action = {
-        $response = irm "$bc/ReceiverLog/modules.replication.isactive=true/rename=Modules.Replication->Replication&select=WorkstationId,LastActive,Replication" @getSettingsRaw
+        $response = irm "$bc/ReceiverLog/modules.replication.isactive=true" @getSettingsRaw
         if ($response.Count -eq 0) {
             Write-Host "Found no connected or disconnected Receivers"
             return
@@ -880,8 +880,8 @@ $getStatusCommands = @(
             [pscustomobject]@{
                 WorkstationId = $_.WorkstationId
                 LastActive = $_.LastActive
-                ReplicationVersion = $_.Replication.ReplicationVersion
-                AwaitsInitialization = $_.Replication.AwaitsInitialization
+                ReplicationVersion = $_.Modules.Replication.ReplicationVersion
+                AwaitsInitialization = $_.Modules.Replication.AwaitsInitialization
             }
         } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Out-Host
     }
@@ -971,7 +971,7 @@ $getStatusCommands = @(
 $dashboardCommands = @(
 @{
     Command = "SoftwareDashboard"
-    Description = "Presents a live dashboard of the status of clients"
+    Description = "Presents a live dashboard of the software status of clients"
     Action = {
         Write-Host "This command is under development..."
         return
@@ -990,8 +990,11 @@ $dashboardCommands = @(
 
             # Egenskaper att tracka:
             # - En modul åt gången
-            # - R (replication), C (receiver), W (wpf client), P (POS Server), 
-            # - Har deployat senaste versionen (as defined in /File)
+            # - R (receiver), W (wpf client), P (POS Server), C (CustomerServiceApplication) 
+            # - View modes
+            #       Deployment statis D – har deployat senaste versionen (as defined in /File)
+            #       Launch status L - har launchat senaste versionen
+            # - 
             # - Har launchat senaste launchad version (as defined in /LaunchSchedule)
 
 
