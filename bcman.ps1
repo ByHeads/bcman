@@ -20,16 +20,21 @@ function Get-BroadcasterUrl
     param($instr)
     if ($instr) { $instr = " $instr" }
     $input = Read-Host "> Enter the URL or hostname of the Broadcaster$instr"
-    $input = $input.Trim().Split("https://")
-    $input = $input[1] ?? $input[0]
+    $input = $input.Trim();
     if ( $input.StartsWith("@")) {
+        # Use input as-is
         $input = $input.SubString(1)
     }
-    elseif (!$input.StartsWith("broadcaster.")) {
-        $input = "broadcaster.$input.heads-api.com"
-    }
-    if (!$input.StartsWith("https://")) {
-        $input = "https://$input"
+    elseif (!$input.StartsWith("https://")) {
+        # Build from a partial URL or conventional hostname
+        if ( $input.Contains(".")) {
+            # It's a partial URL
+            $input = "https://$input"
+        }
+        else {
+            # It's a hostname
+            $input = "https://broadcaster.$input.heads-api.com"
+        }
     }
     if (!$input.EndsWith("/api")) {
         $input += "/api"
@@ -46,7 +51,7 @@ function Get-BroadcasterUrl
         }
     }
     catch { }
-    Write-Host "Found no Broadcaster API responding at $input. Ensure that the URL was input correctly and that the Broadcaster is running"
+    Write-Host "Found no Broadcaster API responding at $input. Ensure that the URL was input correctly and that the Broadcaster is running."
     return Get-BroadcasterUrl $instr
 }
 
@@ -113,8 +118,8 @@ function Get-Batch
         return irm "$bc/Aggregator" @postSettingsRaw -Body $body
     }
     catch {
-        if ($_.Exception.Response.StatusCode -eq 403) {
-            Write-Host "Invalid API key. Ensure that the key has been given a proper access scope"
+        if ($_.Exception.Response.StatusCode -in 401, 403) {
+            Write-Host "Invalid API key for $bc. Ensure that the key has been given the required access scope." -ForegroundColor Red
             exit
         }
         throw
@@ -583,7 +588,7 @@ function Get-LaunchedSoftwareProductVersion
         return $latest
     }
     if ($input -ieq "list") {
-        $versions = irm "$bc/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @getSettingsRaw
+        $versions = irm "$bcUrl/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @settings
         Write-Host
         foreach ($v in $versions) {
             Write-Host $v.Version
@@ -768,9 +773,9 @@ $getStatusCommands = @(
             $notificationsCount = $notifications.Length
             Write-Host "• You have " -NoNewline
             $color = "Green"
-            if ($notificationsCount -gt 0) { $color = "Red" }
+            if ($notificationsCount -gt 0) { $color = "Yellow" }
             $subject = " notification"
-            if ($notificationsCount -gt 1) { $subject = "$subject`s" }
+            if ($notificationsCount -ne 1) { $subject = "$subject`s" }
             Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
             Write-Host $subject -NoNewline
             if ($notificationsCount -gt 0) {
@@ -965,8 +970,6 @@ $getStatusCommands = @(
 
 )
 #endregion
-#region Status
-#endregion
 #region Dashboarda
 $dashboardCommands = @(
 @{
@@ -1047,20 +1050,12 @@ $remoteDeploymentCommands = @(
         if (!$softwareProduct) {
             return
         }
-        $version = Get-LaunchedSoftwareProductVersion $softwareProduct
-        if (!$version) {
-            return
-        }
-        $runtimeId = Get-RuntimeId "to install"
-        if (!$runtimeId) {
-            return
-        }
         $pms = @{ }
+        $version = $null
+        $runtimeId = $null
         $data = @{
             Workstations = $workstationIds
             Product = $softwareProduct
-            Version = $version
-            Runtime = $runtimeId
             Parameters = $pms
         }
         switch ($softwareProduct) {
@@ -1069,10 +1064,31 @@ $remoteDeploymentCommands = @(
                     $bcUrl = Get-BroadcasterUrl "to get the manual client from"
                     $bcUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
                     $data.BroadcasterUrl = $bcUrl
-                    $data.InstallToken = Read-Host "> Enter the install token to use" -MaskInput
+                    $token = Read-Host "> Enter the install token to use at $bcUrl " -MaskInput
+                    $data.InstallToken = $token
                     $label = Label
                     $pms.shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
                     $pms.installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
+                    function Get-Version
+                    {
+                        Write-Host "> Note: The version of the manual client used below should be launched at $bcUrl" -ForegroundColor Yellow
+                        $message = "> Enter $softwareProduct version to use or 'cancel' to cancel"
+                        $input = Read-Host $message
+                        $input = $input.Trim()
+                        if ($input -eq "cancel") {
+                            return $null
+                        }
+                        $r = $null
+                        if (![System.Version]::TryParse($input, [ref]$r)) {
+                            Write-Host "Invalid version format. Try again."
+                            return Get-Version
+                        }
+                        return $input
+                    }
+                    $version = Get-Version
+                    if (!$version) {
+                        return
+                    }
                 }
                 $pms.usePosServer = (Yes "> Connect client to local POS Server?")
                 $pms.useArchiveServer = (Yes "> Connect client to central Archive Server?")
@@ -1089,8 +1105,22 @@ $remoteDeploymentCommands = @(
                 return
             }
         }
+        if (!$version) {
+            $version = Get-LaunchedSoftwareProductVersion $softwareProduct
+            if (!$version) {
+                return
+            }
+        }
+        $runtimeId = Get-RuntimeId "to install"
+        if (!$runtimeId) {
+            return
+        }
+        $data.Version = $version
+        $data.Runtime = $runtimeId
+
+
         $body = $data | ConvertTo-Json
-        Write-Host "> This will install $softwareProduct on $( $workstationIds.Count ) workstations:"
+        Write-Host "> This will install $softwareProduct on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
         Write-Host $workstationIds
         if (Yes "> Do you want to proceed?") {
             Write-Host "Now installing. This could take a while, be patient..."
@@ -1323,6 +1353,23 @@ $modifyCommands = @(
     Command = "Forget"
     Description = "Removes the Receiver log entry for a given workstation"
     Action = $forget_c = {
+        $workstationId = Get-WorkstationId "for the client that should be forgotten"
+        if (!$workstationId) {
+            return
+        }
+        $result = irm "$bc/ReceiverLog/WorkstationId=$workstationId" @deleteSettings
+        if ($result.Status -eq "success") {
+            if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
+            else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
+        }
+        else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
+        & $forget_c
+    }
+}
+@{
+    Command = "IssueToken"
+    Description = "Issues a new install token"
+    Action = $issue_c = {
         $workstationId = Get-WorkstationId "for the client that should be forgotten"
         if (!$workstationId) {
             return
