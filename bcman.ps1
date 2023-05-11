@@ -44,6 +44,13 @@ function Get-BroadcasterUrl
         Write-Host "Invalid URI format. Try again."
         return Get-BroadcasterUrl
     }
+
+    if ( $input.StartsWith("http://")) {
+        # Using unencrypted HTTP
+        Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
+        $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
+    }
+
     try {
         $options = irm $input -Method "OPTIONS" -TimeoutSec 5
         if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
