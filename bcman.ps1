@@ -166,9 +166,9 @@ function Label
     param($existing)
     $label = ""
     if ($existing) {
-        $label = Read-Host "> Enter the unique name of the manual client, e.g. Fynda Testmiljö"
+        $label = Read-Host "> Enter the unique name of the manual client, e.g. Heads Testmiljö"
     } else {
-        $label = Read-Host "> Enter a unique name for the manual client, e.g. Fynda Testmiljö"
+        $label = Read-Host "> Enter a unique name for the manual client, e.g. Heads Testmiljö"
     }
     $label = $label.Trim()
     if ($label -eq '') {
