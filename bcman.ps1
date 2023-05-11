@@ -1531,6 +1531,47 @@ $modifyCommands = @(
     }
 }
 @{
+    Command = "ReplicationFilter"
+    Description = "View and edit the Replication filter, defining the enabled replication recipients"
+    Action = $replicationfilter_c = {
+        $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
+        if ($filter.AllowAll) {
+            Write-Host "Replication is currently enabled for all recipients" -ForegroundColor Green
+        }
+        elseif ($filter.AllowNone) {
+            Write-Host "Replication is currently not enabled for any recipients" -ForegroundColor Red
+        }
+        else {
+            Write-Host "Replication is currently enabled for the following recipients:" -ForegroundColor Green
+            $filter.EnabledRecipients | Out-Host
+        }
+        $input = Read-Host "> Enter 'enable' to enable for all, 'disable' to disable for all, 'edit' to manage enabled recipients or 'enter' to continue"
+        $input = $input.Trim().ToLower()
+        $body = $null
+        switch ($input) {
+            "" { return }
+            "enable" {
+                $body = @{ EnabledRecipients = @("*") } | ConvertTo-Json
+                break
+            }
+            "disable" {
+                $body = @{ EnabledRecipients = @() } | ConvertTo-Json
+                break
+            }
+            "edit" {
+                Write-Host "Replication recipients can be workstation IDs or group names" -ForegroundColor Yellow
+                $body = @{ EnabledRecipients = Get-WorkstationIds } | ConvertTo-Json
+            }
+        }
+        $result = irm "$bc/ReplicationFilter" -Body $body @patchSettings
+        if ($result.Status -eq "success") {
+        } else {
+            Write-Host "An error occured while updating the replication filter"
+        }
+        & $replicationfilter_c
+    }
+}
+@{
     Command = "Groups"
     Description = "Lists and assigns workstation group members"
     Action = $groups_c = {
