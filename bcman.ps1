@@ -1352,6 +1352,20 @@ $remoteDeploymentCommands = @(
         }
     }
 }
+@{
+    Command = "InstallToken"
+    Description = "Generates a new install token with a 7 day expiration"
+    Action = $install_c = {
+        $token = irm "$bc/InstallToken" @getSettingsRaw
+        Write-Host
+        Write-Host "Token:       " -NoNewline
+        Write-Host $token.Token -ForegroundColor Yellow
+        Write-Host "Expires at:  " -NoNewline
+        Write-Host $token.ExpiresAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC") -ForegroundColor Yellow
+        Write-Host
+    }
+}
+
 )
 #endregion
 #region Modify
