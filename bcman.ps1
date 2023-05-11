@@ -551,21 +551,20 @@ function Get-DeployableSoftwareProductVersion
 function Get-LaunchableSoftwareProductVersion
 {
     param($softwareProduct)
+    $versions = irm "$bc/File/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettingsRaw | % { $_.Version }
+    if ($versions.Count -eq 0) {
+        Write-Host "Found no launchable versions of $softwareProduct"
+        return $null
+    }
     $message = "> Enter $softwareProduct version to launch, 'list' for launchable versions of $softwareProduct or 'cancel' to cancel"
     $input = Read-Host $message
     $input = $input.Trim()
     if ($input -ieq "list") {
-        $versions = irm "$bc/File/ProductName=$softwareProduct/order_asc=Version&select=Version&distinct=true" @getSettingsRaw
-        if ($versions.Count -eq 0) {
-            Write-Host "Found no launchable versions of $softwareProduct"
+        Write-Host
+        foreach ($v in $versions) {
+            Write-Host $v
         }
-        else {
-            Write-Host
-            foreach ($v in $versions) {
-                Write-Host $v.Version
-            }
-            Write-Host
-        }
+        Write-Host
         return Get-LaunchableSoftwareProductVersion $softwareProduct
     }
     if ($input -ieq "cancel") {
@@ -574,6 +573,10 @@ function Get-LaunchableSoftwareProductVersion
     $r = $null
     if (![System.Version]::TryParse($input, [ref]$r)) {
         Write-Host "Invalid version format. Try again."
+        return Get-LaunchableSoftwareProductVersion $softwareProduct
+    }
+    if ($versions -notcontains $r) {
+        Write-Host "Version $r is not launchable"
         return Get-LaunchableSoftwareProductVersion $softwareProduct
     }
     return $r
