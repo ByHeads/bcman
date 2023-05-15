@@ -1125,12 +1125,11 @@ $remoteDeploymentCommands = @(
         if (!$runtimeId) {
             return
         }
-        $data.Version = $version
+        $data.Version = $version.ToString()
         $data.Runtime = $runtimeId
 
-
         $body = $data | ConvertTo-Json
-        Write-Host "> This will install $softwareProduct on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
+        Write-Host "> This will install $softwareProduct $version on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
         Write-Host $workstationIds
         if (Yes "> Do you want to proceed?") {
             Write-Host "Now installing. This could take a while, be patient..."
