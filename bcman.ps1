@@ -598,7 +598,7 @@ function Get-LaunchedSoftwareProductVersion
         return $latest
     }
     if ($input -ieq "list") {
-        $versions = irm "$bcUrl/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @settings
+        $versions = irm "$bc/LaunchSchedule/ProductName=$softwareProduct/select=Version&order_asc=Version&distinct=true" @getSettingsRaw
         Write-Host
         foreach ($v in $versions) {
             Write-Host $v.Version
