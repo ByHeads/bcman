@@ -1575,7 +1575,9 @@ $modifyCommands = @(
             }
             "edit" {
                 Write-Host "Replication recipients can be workstation IDs or group names" -ForegroundColor Yellow
-                $body = @{ EnabledRecipients = Get-WorkstationIds } | ConvertTo-Json
+                [string[]]$recipients = Get-WorkstationIds
+                $body = @{ EnabledRecipients = $recipients } | ConvertTo-Json
+                break
             }
         }
         $result = irm "$bc/ReplicationFilter" -Body $body @patchSettings
