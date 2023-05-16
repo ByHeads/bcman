@@ -844,7 +844,7 @@ $getStatusCommands = @(
         }
         $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true" @getSettingsRaw
         if ($response.Count -eq 0) {
-            Write-Host "Found no connected or disconnected Receivers"
+            Write-Host "Found no connected or disconnected Receivers with $softwareProduct installed"
             return
         }
         $response | % {
