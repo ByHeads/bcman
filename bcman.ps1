@@ -1106,8 +1106,8 @@ $remoteDeploymentCommands = @(
             "PosServer" {
                 $pms.createDump = (Yes "> Create a dump of an existing POS-server?")
                 $pms.collation = (Collation "> Enter database collation, e.g. sv-SE")
-                $pms.imageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
-                $pms.logSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
+                $pms.databaseImageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
+                $pms.databaseLogSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
             }
             default {
                 Write-Host "Can't remote-install $softwareProduct"
