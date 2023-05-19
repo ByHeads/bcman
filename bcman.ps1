@@ -793,6 +793,20 @@ $getStatusCommands = @(
                 Write-Host "notifications" -ForegroundColor Yellow -NoNewline
                 Write-Host ")"
             }
+            $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
+            if ($filter.AllowAll) { }
+            elseif ($filter.AllowNone) {
+                Write-Host "• " -NoNewline
+                Write-Host "Replication is currently not enabled for any recipients" -ForegroundColor Red
+            }
+            else {
+                Write-Host "• " -NoNewline
+                Write-Host "Replication is currently enabled " -NoNewline
+                Write-Host "only for some" -ForegroundColor Yellow -NoNewline
+                Write-Host " recipients (see " -NoNewline
+                Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                Write-Host ")"
+            }
             Write-Host
         }
         catch {
@@ -1557,14 +1571,13 @@ $modifyCommands = @(
             Write-Host "Replication is currently not enabled for any recipients" -ForegroundColor Red
         }
         else {
-            Write-Host "Replication is currently enabled for the following recipients:" -ForegroundColor Green
+            Write-Host "Replication is currently enabled ONLY for the following recipients:" -ForegroundColor Yellow
             $filter.EnabledRecipients | Out-Host
         }
         $input = Read-Host "> Enter 'enable' to enable for all, 'disable' to disable for all, 'edit' to manage enabled recipients or 'enter' to continue"
         $input = $input.Trim().ToLower()
         $body = $null
         switch ($input) {
-            "" { return }
             "enable" {
                 $body = @{ EnabledRecipients = @("*") } | ConvertTo-Json
                 break
@@ -1579,6 +1592,7 @@ $modifyCommands = @(
                 $body = @{ EnabledRecipients = $recipients } | ConvertTo-Json
                 break
             }
+            default { return }
         }
         $result = irm "$bc/ReplicationFilter" -Body $body @patchSettings
         if ($result.Status -eq "success") {
