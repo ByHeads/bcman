@@ -675,6 +675,7 @@ function Get-DateTime
     $dateTime = $null
     try {
         if ($input.Length -lt 10) {
+        if ($input.Length -lt 10 -or $input[4] -ne '-') {
             throw ""
         }
         if ($isUtc) {
