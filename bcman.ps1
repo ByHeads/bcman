@@ -827,7 +827,7 @@ $getStatusCommands = @(
     Command = "ReceiverLog"
     Description = "Prints the last recorded status for all connected and disconnected Receivers"
     Action = {
-        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive" @getSettingsRaw
+        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive,IsConnected" @getSettingsRaw
         if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
         else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
     }
