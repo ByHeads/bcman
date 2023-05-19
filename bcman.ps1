@@ -446,10 +446,18 @@ function Get-WorkstationId
 {
     param($instr)
     if ($instr) { $instr = " $instr" }
+    $workstationIds = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | % { $_.WorkstationId }
+    if ($workstationIds.Count -eq 0) {
+        Write-Host "Found no connected or disconnected Receivers"
+        return $null
+    }
     $input = Read-Host "> Enter workstation ID$instr, 'list' to list workstation IDs or 'cancel' to cancel"
+
     switch ( $input.Trim().ToLower()) {
         "list" {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | Out-Host
+            Write-Host
+            $workstationIds | Out-Host
+            Write-Host
             return Get-WorkstationId $instr
         }
         "" {
@@ -457,7 +465,13 @@ function Get-WorkstationId
             return Get-WorkstationId $instr
         }
         "cancel" { return $null }
-        default { return $input }
+        default {
+            if ($workstationIds -notcontains $input) {
+                Write-Host "Found no workstation with ID $input"
+                return Get-WorkstationId $instr
+            }
+            return $input
+        }
     }
 }
 
@@ -476,22 +490,20 @@ function Get-RemoteFolder
 
 function Get-WorkstationIds
 {
-    $input = Read-Host "> Enter a comma-separated list of workstation IDs, * for all, 'list' to list workstation IDs or 'cancel' to cancel"
+    param($instr)
+    if ($instr) { $instr = " $instr" }
+    $workstationIds = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | % { $_.WorkstationId }
+    if ($workstationIds.Count -eq 0) {
+        Write-Host "Found no connected or disconnected Receivers"
+        return $null
+    }
+    $input = Read-Host "> Enter a comma-separated list of workstation IDs$instr, * for all, 'list' to list workstation IDs or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
-        "*" {
-            $values = irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw
-            [string[]]$ids = $( )
-            foreach ($value in $values) {
-                $ids += $value.WorkstationId
-            }
-            if ($ids.Length -ne 0) {
-                return $ids
-            }
-            Write-Host "Received an empty list"
-            return Get-WorkstationIds
-        }
+        "*" { return $workstationIds }
         "list" {
-            irm "$bc/ReceiverLog/_/select=WorkstationId" @getSettingsRaw | Out-Host
+            Write-Host
+            $workstationIds | Out-Host
+            Write-Host
             return Get-WorkstationIds
         }
         "" {
@@ -501,11 +513,17 @@ function Get-WorkstationIds
         "cancel" { return $null }
         default {
             [string[]]$ids = $input.Split(',', [System.StringSplitOptions]::TrimEntries + [System.StringSplitOptions]::RemoveEmptyEntries)
-            if ($ids.Length -ne 0) {
-                return $ids
+            foreach ($id in $ids) {
+                if ($workstationIds -notcontains $id) {
+                    Write-Host "Found no workstation with ID $id"
+                    return Get-WorkstationIds $instr
+                }
             }
-            Write-Host "Received an empty list"
-            return Get-WorkstationIds
+            if ($ids.Length -eq 0) {
+                Write-Host "Received an empty list"
+                return Get-WorkstationIds
+            }
+            return $ids
         }
     }
 }
@@ -761,12 +779,14 @@ $getStatusCommands = @(
                 Config = "GET /Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version"
                 NextVersion = "GET /BroadcasterUpdate/_/order_desc=Version&limit=1"
                 Notifications = "GET /NotificationLog"
+                ReplicationFilter = "GET /ReplicationFilter"
             }
             $version = $results.Config[0].Version
             $hostName = $results.Config[0].ComputerName
             $nextVersion = $null
             $nextVersion = $results.NextVersion | select -First 1 -Exp Version
             $notifications = $results.Notifications
+            $filter = $results.ReplicationFilter
 
             Write-Host
             Write-Host "• Connected to: " -NoNewLine
@@ -775,7 +795,7 @@ $getStatusCommands = @(
             Write-Host $version -ForegroundColor Green
             if ($nextVersion) {
                 Write-Host "• A new version: "  -NoNewline
-                Write-Host $nextVersion -ForegroundColor Green -NoNewline
+                Write-Host $nextVersion -ForegroundColor Magenta -NoNewline
                 Write-Host " is available (see " -NoNewline
                 Write-Host "update" -ForegroundColor Yellow -NoNewline
                 Write-Host ")"
@@ -793,11 +813,13 @@ $getStatusCommands = @(
                 Write-Host "notifications" -ForegroundColor Yellow -NoNewline
                 Write-Host ")"
             }
-            $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
             if ($filter.AllowAll) { }
             elseif ($filter.AllowNone) {
                 Write-Host "• " -NoNewline
-                Write-Host "Replication is currently not enabled for any recipients" -ForegroundColor Red
+                Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
+                Write-Host "(see " -NoNewline
+                Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                Write-Host ")"
             }
             else {
                 Write-Host "• " -NoNewline
@@ -923,7 +945,9 @@ $getStatusCommands = @(
         if (!$workstationId) {
             return
         }
-        $response = irm "$bc/ReceiverLog/WorkstationId=$workstationId/select=Modules" @getSettingsRaw | Select-Object -first 1
+        $widLower = $workstationId.ToLower()
+        $widUpper = $workstationId.ToUpper()
+        $response = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper/select=Modules" @getSettingsRaw | Select-Object -first 1
         if (!$response) {
             Write-Host "Found no Receiver with workstation ID $workstationId"
             & $receiverDetails_c
@@ -1153,7 +1177,7 @@ $remoteDeploymentCommands = @(
             return
         }
         $result = irm "$bc/RemoteInstall" @postSettings -Body $body
-        if ($result.Status -eq "success") {
+        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
             Write-Host
             Write-Host "RESULTS:" -ForegroundColor Yellow
             Write-Host
@@ -1176,6 +1200,7 @@ $remoteDeploymentCommands = @(
         }
         else {
             Write-Host "An error occurred while remote-installing $softwareProduct"
+            $result | Out-Host
         }
     }
 }
@@ -1221,7 +1246,7 @@ $remoteDeploymentCommands = @(
             return
         }
         $result = irm "$bc/RemoteUninstall" @postSettings -Body $body
-        if ($result.Status -eq "success") {
+        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
             Write-Host
             Write-Host "RESULTS:" -ForegroundColor Yellow
             Write-Host
@@ -1244,6 +1269,7 @@ $remoteDeploymentCommands = @(
         }
         else {
             Write-Host "An error occurred while remote-uninstalling $softwareProduct"
+            $result | Out-Host
         }
         & $uninstall_c
     }
@@ -1344,7 +1370,7 @@ $remoteDeploymentCommands = @(
             return
         }
         $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue
-        if ($result.Status -eq "success") {
+        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
             Write-Host
             Write-Host "RESULTS:" -ForegroundColor Yellow
             Write-Host
@@ -1364,7 +1390,8 @@ $remoteDeploymentCommands = @(
             Write-Host
         }
         else {
-            Write-Host "An error occurred while remote-controlling the clients"
+            Write-Host "An error occurred while running $command on the given clients"
+            $result | Out-Host
         }
     }
 }
@@ -1393,24 +1420,9 @@ $modifyCommands = @(
         if (!$workstationId) {
             return
         }
-        $result = irm "$bc/ReceiverLog/WorkstationId=$workstationId" @deleteSettings
-        if ($result.Status -eq "success") {
-            if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
-            else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
-        }
-        else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
-        & $forget_c
-    }
-}
-@{
-    Command = "IssueToken"
-    Description = "Issues a new install token"
-    Action = $issue_c = {
-        $workstationId = Get-WorkstationId "for the client that should be forgotten"
-        if (!$workstationId) {
-            return
-        }
-        $result = irm "$bc/ReceiverLog/WorkstationId=$workstationId" @deleteSettings
+        $widLower = $workstationId.ToLower()
+        $widUpper = $workstationId.ToUpper()
+        $result = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper" @deleteSettings
         if ($result.Status -eq "success") {
             if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
             else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
@@ -1568,7 +1580,7 @@ $modifyCommands = @(
             Write-Host "Replication is currently enabled for all recipients" -ForegroundColor Green
         }
         elseif ($filter.AllowNone) {
-            Write-Host "Replication is currently not enabled for any recipients" -ForegroundColor Red
+            Write-Host "Replication is currently disabled for all recipients" -ForegroundColor Red
         }
         else {
             Write-Host "Replication is currently enabled ONLY for the following recipients:" -ForegroundColor Yellow
@@ -1629,7 +1641,7 @@ $modifyCommands = @(
         Write-Host "> This Broadcaster is running version " -NoNewline
         Write-Host $version -ForegroundColor Yellow -NoNewline
         Write-Host ". A new version " -NoNewline
-        Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
+        Write-Host $nextAvailable.Version -ForegroundColor Magenta -NoNewline
         Write-Host " is available!"
         $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
         $response = $response.Trim().ToLower()
