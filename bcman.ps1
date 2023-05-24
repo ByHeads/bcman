@@ -1015,7 +1015,25 @@ $getStatusCommands = @(
         }
     }
 }
-
+@{
+    Command = "CheckRetailConnection"
+    Description = "Prints details about the Heads Retail Connection"
+    Action = {
+        $response = irm "$bc/CheckRetailConnection" @getSettingsRaw
+        $status = $response[0].Status
+        switch ($status) {
+            "NotConfigured" {
+                Write-Host "The Heads Retail connection is not configured" -ForegroundColor Yellow
+            }
+            "Connected" {
+                Write-Host "Heads Retail is connected!" -ForegroundColor Green
+            }
+            "Invalid" {
+                Write-Host "A Heads Retail connection could not be established. Check configuration" -ForegroundColor Yellow
+            }
+        }
+    }
+}
 )
 #endregion
 #region Dashboarda
@@ -1278,8 +1296,6 @@ $remoteDeploymentCommands = @(
     Command = "Reset"
     Description = "Resets one or more POS server databases, optionally also closing their day journals"
     Action = {
-        Write-Host "> This feature has not been tested and might not work as expected. Press enter to confirm and continue" -ForegroundColor Red
-        Read-Host
         [string[]]$workstationIds = Get-WorkstationIds
         Write-Host "> Selected these workstations for reset:"
         Write-Host
