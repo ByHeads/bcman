@@ -1056,17 +1056,6 @@ $dashboardCommands = @(
 
         $num = 0
         while ($true) {
-
-            # Egenskaper att tracka:
-            # - En modul åt gången
-            # - R (receiver), W (wpf client), P (POS Server), C (CustomerServiceApplication) 
-            # - View modes
-            #       Deployment statis D – har deployat senaste versionen (as defined in /File)
-            #       Launch status L - har launchat senaste versionen
-            # - 
-            # - Har launchat senaste launchad version (as defined in /LaunchSchedule)
-
-
             $data = Get-Batch $body
             $listData = $data.ReceiverLog | % {
                 $status = "Up to date"
