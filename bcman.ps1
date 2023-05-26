@@ -1026,10 +1026,16 @@ $getStatusCommands = @(
                 Write-Host "The Heads Retail connection is not configured" -ForegroundColor Yellow
             }
             "Connected" {
-                Write-Host "Heads Retail is connected!" -ForegroundColor Green
+                Write-Host "The Heads Retail is connected" -ForegroundColor Green
             }
-            "Invalid" {
-                Write-Host "A Heads Retail connection could not be established. Check configuration" -ForegroundColor Yellow
+            "Unreachable" {
+                Write-Host "Heads Retail is unreachable. Check the URL field in the RetailConnection section of the Broadcaster configuration" -ForegroundColor Yellow
+            }
+            "Unauthorized" {
+                Write-Host "Cannot authorize with Heads Retail. Check the BasicAuth field in the RetailConnection section of the Broadcaster configuration and make sure that the use exists with the correct access in Heads Retail" -ForegroundColor Yellow
+            }
+            "InternalError" {
+                Write-Host "An internal error occurred when contacting Heads Retail. Check the Broadcaster logs for more information" -ForegroundColor Yellow
             }
         }
     }
