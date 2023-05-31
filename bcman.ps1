@@ -1181,7 +1181,7 @@ $remoteDeploymentCommands = @(
 
         $body = $data | ConvertTo-Json
         Write-Host "> This will install $softwareProduct $version on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
-        Write-Host $workstationIds
+        $workstationIds | Out-Host
         if (Yes "> Do you want to proceed?") {
             Write-Host "Now installing. This could take a while, be patient..."
         }
@@ -1253,7 +1253,7 @@ $remoteDeploymentCommands = @(
         $body = $data | ConvertTo-Json
 
         Write-Host "> This will uninstall $( $data.Product ?? "legacy software" ) on $( $data.Workstations.Count ) workstations:"
-        Write-Host $workstationIds
+        $workstationIds | Out-Host
         if (!(Yes "> Do you want to proceed?")) {
             Write-Host "Aborted"
             return
@@ -1373,7 +1373,7 @@ $remoteDeploymentCommands = @(
         }
         $body = $data | ConvertTo-Json
         Write-Host "> This will $command $softwareProduct on $( $workstationIds.Count ) workstations:"
-        Write-Host $workstationIds
+        $workstationIds | Out-Host
         if (Yes "> Do you want to proceed?") {
             Write-Host "Running command. This could take a while, be patient..."
         }
