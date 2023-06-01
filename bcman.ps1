@@ -181,6 +181,32 @@ function Label
     }
     return $label
 }
+function Write-RemoteResult
+{
+    param($result)
+    if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
+        Write-Host
+        Write-Host "RESULTS:" -ForegroundColor Yellow
+        Write-Host
+        foreach ($item in $result.Data) {
+            $id = $item.ExecutedScript.ExecutedBy
+            if ($id -eq $item.WorkstationId) {
+                $id = $item.WorkstationId
+            }
+            Write-Host "$id`: " -NoNewline
+            if ($item.ExecutedScript.ExecutedSuccessfully) {
+                Write-Host "Success" -ForegroundColor Green
+            } else {
+                Write-Host "Failed" -ForegroundColor Red -NoNewline
+                Write-Host " – " -NoNewline
+                Write-Host $item.ExecutedScript.Errors
+            }
+        }
+    }
+    else {
+        throw $result
+    }
+}
 function Write-DashboardHeader
 {
     param($name)
@@ -272,7 +298,6 @@ function Enter-Terminal
         Write-Host "Returning to Broadcaster Manager" -ForegroundColor Yellow
     }
 }
-
 function Get-Terminal
 {
     $input = Read-Host "> Enter the name of the terminal, or 'list' to list all terminals"
@@ -287,7 +312,6 @@ function Get-Terminal
     }
     return $input
 }
-
 function Get-SoftwareProduct
 {
     $input = Read-Host "> Enter software product name: WpfClient, PosServer, Receiver or 'cancel' to cancel"
@@ -323,7 +347,6 @@ function Get-SoftwareProduct
         }
     }
 }
-
 function Create-WorkstationGroup
 {
     $name = Read-Host "> Enter a name for the new workstation group"
@@ -335,7 +358,6 @@ function Create-WorkstationGroup
     }
     return $name
 }
-
 function Get-WorkstationGroup
 {
     $input = Read-Host "> Enter the name of a workstation group, 'list' for available groups, 'new' to create one or 'cancel' to cancel"
@@ -358,13 +380,11 @@ function Get-WorkstationGroup
         default { return $input }
     }
 }
-
 function Get-WorkstationGroupMembers
 {
     param($group)
     return (irm "$bc/WorkstationGroups/_/select=$group" @getSettingsRaw)[0].$group
 }
-
 function Add-WorkstationGroupMember
 {
     param($group)
@@ -384,7 +404,6 @@ function Add-WorkstationGroupMember
     }
     Add-WorkstationGroupMember $group
 }
-
 function Remove-WorkstationGroupMember
 {
     param($group)
@@ -406,7 +425,6 @@ function Remove-WorkstationGroupMember
     Write-Host "$workstationId was removed from the group $group"
     Add-WorkstationGroupMember $group
 }
-
 function Manage-WorkstationGroup
 {
     param($group)
@@ -441,7 +459,6 @@ function Manage-WorkstationGroup
         default { Manage-WorkstationGroup $group }
     }
 }
-
 function Get-WorkstationId
 {
     param($instr)
@@ -474,7 +491,6 @@ function Get-WorkstationId
         }
     }
 }
-
 function Get-RemoteFolder
 {
     $input = Read-Host "> Enter a path to a folder on the build output share (e.g. retail/23.1)"
@@ -487,7 +503,6 @@ function Get-RemoteFolder
         default { return $input }
     }
 }
-
 function Get-WorkstationIds
 {
     param($instr)
@@ -527,7 +542,6 @@ function Get-WorkstationIds
         }
     }
 }
-
 function Get-DeployableSoftwareProductVersion
 {
     param($softwareProduct)
@@ -565,7 +579,6 @@ function Get-DeployableSoftwareProductVersion
     }
     return $r
 }
-
 function Get-LaunchableSoftwareProductVersion
 {
     param($softwareProduct)
@@ -599,7 +612,6 @@ function Get-LaunchableSoftwareProductVersion
     }
     return $r
 }
-
 function Get-LaunchedSoftwareProductVersion
 {
     param($softwareProduct)
@@ -634,7 +646,6 @@ function Get-LaunchedSoftwareProductVersion
     }
     return $r
 }
-
 function Get-RuntimeId
 {
     param($softwareProduct, $instr)
@@ -652,7 +663,6 @@ function Get-RuntimeId
         return $input
     }
 }
-
 function Get-DateTime
 {
     $input = Read-Host "> Enter date and time for the launch, press enter for now, 'examples' for examples or 'cancel' to cancel"
@@ -707,7 +717,6 @@ function Get-DateTime
         return Get-DateTime
     }
 }
-
 function Get-LaunchSchedule
 {
     $launches = irm "$bc/LaunchSchedule" @getSettingsRaw
@@ -1182,39 +1191,22 @@ $remoteDeploymentCommands = @(
         $body = $data | ConvertTo-Json
         Write-Host "> This will install $softwareProduct $version on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
         $workstationIds | Out-Host
-        if (Yes "> Do you want to proceed?") {
-            Write-Host "Now installing. This could take a while, be patient..."
-        }
-        else {
+        if (!(Yes "> Do you want to proceed?")) {
             Write-Host "Aborted"
             return
         }
+        Write-Host "Running remote install (this could take a while)" -ForegroundColor Yellow
         $result = irm "$bc/RemoteInstall" @postSettings -Body $body
-        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
-            Write-Host
-            Write-Host "RESULTS:" -ForegroundColor Yellow
-            Write-Host
-            foreach ($item in $result.Data) {
-                $id = $item.ExecutedScript.ExecutedBy
-                if ($id -eq $item.WorkstationId) {
-                    $id = $item.WorkstationId
-                }
-                Write-Host "$id`: " -NoNewline
-                if ($item.ExecutedScript.ExecutedSuccessfully) {
-                    Write-Host "Success" -ForegroundColor Green
-                } else {
-                    Write-Host "Failed" -ForegroundColor Red
-                    Write-Host $item.ExecutedScript.Errors
-                }
-            }
+        try {
+            Write-RemoteResult $result
             Write-Host
             Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
-            Write-Host
         }
-        else {
+        catch {
             Write-Host "An error occurred while remote-installing $softwareProduct"
             $result | Out-Host
         }
+        & $install_c
     }
 }
 @{
@@ -1258,29 +1250,14 @@ $remoteDeploymentCommands = @(
             Write-Host "Aborted"
             return
         }
+        Write-Host "Running remote uninstall (this could take a while)" -ForegroundColor Yellow
         $result = irm "$bc/RemoteUninstall" @postSettings -Body $body
-        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
-            Write-Host
-            Write-Host "RESULTS:" -ForegroundColor Yellow
-            Write-Host
-            foreach ($item in $result.Data) {
-                $id = $item.ExecutedScript.ExecutedBy
-                if ($id -eq $item.WorkstationId) {
-                    $id = $item.WorkstationId
-                }
-                Write-Host "$id`: " -NoNewline
-                if ($item.ExecutedScript.ExecutedSuccessfully) {
-                    Write-Host "Success" -ForegroundColor Green
-                } else {
-                    Write-Host "Failed" -ForegroundColor Red
-                    Write-Host $item.ExecutedScript.Errors
-                }
-            }
+        try {
+            Write-RemoteResult $result
             Write-Host
             Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
-            Write-Host
         }
-        else {
+        catch {
             Write-Host "An error occurred while remote-uninstalling $softwareProduct"
             $result | Out-Host
         }
@@ -1293,9 +1270,7 @@ $remoteDeploymentCommands = @(
     Action = {
         [string[]]$workstationIds = Get-WorkstationIds
         Write-Host "> Selected these workstations for reset:"
-        Write-Host
         $workstationIds | Out-Host
-        Write-Host
         $closeDayJournal = Yes "> Should we close relevant day journals before resetting these workstations?"
         if ($closeDayJournal -eq $null) {
             return
@@ -1311,16 +1286,23 @@ $remoteDeploymentCommands = @(
                 return
             }
         }
-        $confirm = Read-Host "> Ready to reset the selected workstations. Enter 'reset' to reset them now or 'cancel' to cancel"
-        $confirm = $confirm.Trim()
-        if ($confirm -ine "reset") {
-            Write-Host "Aborting reset"
+        Write-Host "> This will reset the POS-Server databases on $( $workstationIds.Length ) workstations:"
+        $workstationIds | Out-Host
+        if (!(Yes "> Do you want to proceed?")) {
+            Write-Host "Aborted"
             return
         }
         Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
         $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
         $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 240
-        $result | Select-Object -ExpandProperty ExecutedScript | Select-Object -Property ("ExecutedBy", "Information", "Errors", "ExecutedSuccessfully") | Format-Table | Out-Host
+        try {
+            Write-RemoteResult $result
+            Write-Host
+        }
+        catch {
+            Write-Host "An error occurred while running reset"
+            $result | Out-Host
+        }
     }
 }
 @{
@@ -1374,34 +1356,17 @@ $remoteDeploymentCommands = @(
         $body = $data | ConvertTo-Json
         Write-Host "> This will $command $softwareProduct on $( $workstationIds.Count ) workstations:"
         $workstationIds | Out-Host
-        if (Yes "> Do you want to proceed?") {
-            Write-Host "Running command. This could take a while, be patient..."
-        }
-        else {
+        if (!(Yes "> Do you want to proceed?")) {
             Write-Host "Aborted"
             return
         }
+        Write-Host "Running $command (this could take a while)" -ForegroundColor Yellow
         $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue
-        if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
-            Write-Host
-            Write-Host "RESULTS:" -ForegroundColor Yellow
-            Write-Host
-            foreach ($item in $result.Data) {
-                $id = $item.ExecutedScript.ExecutedBy
-                if ($id -eq $item.WorkstationId) {
-                    $id = $item.WorkstationId
-                }
-                Write-Host "$id`: " -NoNewline
-                if ($item.ExecutedScript.ExecutedSuccessfully) {
-                    Write-Host "Success" -ForegroundColor Green
-                } else {
-                    Write-Host "Failed" -ForegroundColor Red
-                    Write-Host $item.ExecutedScript.Errors
-                }
-            }
+        try {
+            Write-RemoteResult $result
             Write-Host
         }
-        else {
+        catch {
             Write-Host "An error occurred while running $command on the given clients"
             $result | Out-Host
         }
@@ -1410,7 +1375,7 @@ $remoteDeploymentCommands = @(
 @{
     Command = "InstallToken"
     Description = "Generates a new install token with a 7 day expiration"
-    Action = $install_c = {
+    Action = {
         $token = irm "$bc/InstallToken" @getSettingsRaw
         Write-Host
         Write-Host "Token:       " -NoNewline
