@@ -184,7 +184,7 @@ function Label
 function Write-RemoteResult
 {
     param($result)
-    if ($result.Status -eq "success" -and $result.Data.Count -gt 0) {
+    if ($result.Status -eq "success" -and $result.DataCount -gt 0) {
         Write-Host
         Write-Host "RESULTS:" -ForegroundColor Yellow
         Write-Host
@@ -1301,6 +1301,7 @@ $remoteDeploymentCommands = @(
         }
         catch {
             Write-Host "An error occurred while running reset"
+            Write-Host $_
             $result | Out-Host
         }
     }
