@@ -1301,7 +1301,6 @@ $remoteDeploymentCommands = @(
         }
         catch {
             Write-Host "An error occurred while running reset"
-            Write-Host $_
             $result | Out-Host
         }
     }
