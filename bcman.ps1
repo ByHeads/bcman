@@ -1294,7 +1294,7 @@ $remoteDeploymentCommands = @(
         }
         Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
         $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
-        $result = irm "$bc/Reset" -Body $body @postSettingsRaw -TimeoutSec 240
+        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 240
         try {
             Write-RemoteResult $result
             Write-Host
