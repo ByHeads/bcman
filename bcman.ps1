@@ -225,7 +225,7 @@ function Quit-Dashboard
             $keyInfo = [System.Console]::ReadKey($true)
             $keyChar = $keyInfo.KeyChar
             $ctrlC = $keyInfo.Key -eq [System.ConsoleKey]::C -and $keyInfo.Modifiers -eq [System.ConsoleModifiers]::Control
-            if ($ctrlC) { Write-Host "Received Ctrl+C, quitting..."; return $true }
+            if ($ctrlC) { Write-Host "Received Ctrl+C, quitting..."; Write-Host; return $true }
             if ($keyChar -eq " ") { Write-Host "Refreshing..."; return $false }
         }
     }
@@ -314,11 +314,18 @@ function Get-Terminal
 }
 function Get-SoftwareProduct
 {
-    $input = Read-Host "> Enter software product name: WpfClient, PosServer, Receiver or 'cancel' to cancel"
+    $input = Read-Host "> Enter a software product name, 'list' for all names or 'cancel' to cancel"
     switch ( $input.Trim().ToLower()) {
+        "list"{
+            Write-Host
+            "Receiver", "WpfClient", "PosServer", "CustomerServiceApplication" | Out-Host
+            Write-Host
+            return Get-SoftwareProduct
+        }
         "receiver" { return "Receiver" }
         "wpfclient" { return "WpfClient" }
         "posserver" { return "PosServer" }
+        "customerserviceapplication" { return "CustomerServiceApplication" }
         "elephant" {
             Write-Host "Sorry, I can't really work with elephants ¯\_(ツ)_/¯ ... only squirrels, beavers and the occasional hedgehog"
             return Get-SoftwareProduct
@@ -545,22 +552,22 @@ function Get-WorkstationIds
 function Get-DeployableSoftwareProductVersion
 {
     param($softwareProduct)
-    $message = "> Enter $softwareProduct version to deploy, 'list' for deployable versions of $softwareProduct or 'cancel' to cancel"
+    $message = "> Enter version to deploy, 'list' for all deployable versions or 'cancel' to cancel"
     $input = Read-Host $message
     $input = $input.Trim()
     if ($input -ieq "list") {
-        $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct&SoftwareItemType=DeployScript/order_asc=CreatedUTC&select=Version,CreatedUtc&distinct=true" @getSettings
+        $versions = irm "$bc/RemoteFile/ProductName=$softwareProduct&SoftwareItemType=DeployScript/order_asc=CreatedUTC&select=Version,CreatedUtc" @getSettings
         if ($versions.status -eq "success") {
             if ($versions.DataCount -eq 0) {
                 Write-Host "Found no deployable versions of $softwareProduct"
             }
             else {
-                $versions.data | % {
+                $versions.data | Group-Object 'Version' | % { $_.Group | Select -Last 1 } | % {
                     [pscustomobject]@{
                         Version = $_.Version.ToString()
                         "Build time" = $_.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")
                     }
-                } | Out-Host
+                } | % { Pad $_ } | Out-Host
             }
         }
         else {
@@ -1051,14 +1058,13 @@ $getStatusCommands = @(
 }
 )
 #endregion
-#region Dashboarda
+#region Dashboards
 $dashboardCommands = @(
 @{
     Command = "SoftwareDashboard"
     Description = "Presents a live dashboard of the software status of clients"
     Action = {
         Write-Host "This command is under development..."
-        return
         $softwareProduct = Get-SoftwareProduct
         if (!$softwareProduct) {
             return
@@ -1169,6 +1175,7 @@ $remoteDeploymentCommands = @(
                 $pms.databaseImageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
                 $pms.databaseLogSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
             }
+            "CustomerServiceApplication" { }
             default {
                 Write-Host "Can't remote-install $softwareProduct"
                 & $install_c
@@ -1422,21 +1429,24 @@ $modifyCommands = @(
         }
         $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
         $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
-        Write-Host "Downloading $softwareProduct $version to the Broadcaster. Be patient..."
+        Write-Host
+        Write-Host "Downloading $softwareProduct $version to the Broadcaster. Be patient..." -ForegroundColor Yellow
         $body = @{ Deploy = $true } | ConvertTo-Json
-        $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/unsafe=true" -Body $body @patchSettings
+        $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/offset=-4&unsafe=true" -Body $body @patchSettings
         if ($result.Status -eq "success") {
             if ($result.DataCount -eq 0) {
-                Write-Host "No version was deployed. Please ensure that version $version of $softwareProduct is deployable."
+                Write-Host "No version was deployed. Please ensure that version $version of $softwareProduct is deployable." -ForegroundColor Red
                 & $deploy_c
             } else {
-                Write-Host "$softwareProduct $version was successfully deployed!"
+                Write-Host "Success!" -ForegroundColor Green
             }
         }
         else {
             Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
             Write-Host $result
         }
+        Write-Host
+        $deploy_c
     }
 }
 @{
