@@ -1,3 +1,7 @@
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    return "Broadcaster Manager requires PowerShell 7 or later"
+}
+
 #region Welcome splash
 
 Write-Host
@@ -1840,6 +1844,7 @@ function Call($command)
         if ($c.Command -ieq $command) {
             $foundCommand = $true
             & $c.Action
+            return
         }
     }
     if (!$foundCommand) {
