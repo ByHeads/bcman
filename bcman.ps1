@@ -1450,7 +1450,7 @@ $modifyCommands = @(
             Write-Host $result
         }
         Write-Host
-        $deploy_c
+        & $deploy_c
     }
 }
 @{
