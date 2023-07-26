@@ -1012,13 +1012,13 @@ $getStatusCommands = @(
         [pscustomobject[]]$notifications = $response.Data | % {
             [pscustomobject]@{
                 Id = ($numId += 1)
+                TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
                 Source = $_.Source
                 Message = $_.Message
-                TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
                 Hash = $_.Id
             }
         }
-        $notifications | % { Pad $_ } | Format-Table -AutoSize | Out-Host
+        $notifications | % { Pad $_ } | Format-Table -AutoSize -Wrap | Out-Host
         $id = Read-Host "> Enter the ID of a notification to clear it, or enter to continue"
         $id = $id.Trim() -as [int]
         if ($id -gt 0) {
