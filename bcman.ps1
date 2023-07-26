@@ -944,7 +944,7 @@ $getStatusCommands = @(
     Action = {
         $response = irm "$bc/ReceiverLog/modules.replication.isactive=true" @getSettingsRaw
         if ($response.Count -eq 0) {
-            Write-Host "Found no connected or disconnected Receivers"
+            Write-Host "Found no connected or disconnected Receivers that use replication"
             return
         }
         $response | % {
@@ -971,6 +971,12 @@ $getStatusCommands = @(
         if (!$response) {
             Write-Host "Found no Receiver with workstation ID $workstationId"
             & $receiverDetails_c
+        }
+        # else if has no properties
+        elseif ($response.PSObject.Properties.Count -eq 0) {
+            Write-Host
+            Write-Host "Found no details for $workstationId. Details will sync automatically the next time the Receiver is connected"
+            Write-Host
         }
         else {
             Write-Host
