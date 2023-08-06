@@ -1,3 +1,39 @@
 #!ps
-try { irm raw.githubusercontent.com/byheads/util/main/lp | iex } catch { break }
+# This script ensures that clients run PowerShell 7 (pwsh) and then launches the Broadcaster Manager
+$requiredPsVersion = 7
+if ($PSVersionTable.PSVersion.Major -lt $requiredPsVersion) {
+    # Upgrade to PowerShell 7
+    $coreVersion = Get-ItemPropertyValue -Path "HKLM:\SOFTWARE\Microsoft\PowerShellCore\InstalledVersions\*" -Name "SemanticVersion" -ErrorAction SilentlyContinue
+    if (!$coreVersion -or !$coreVersion.StartsWith("$requiredPsVersion")) {
+        function Yes($message)
+        {
+            switch ( (Read-Host "$message (yes/no)").Trim()) {
+                "yes" { return $true } "no" { return $false } "y" { return $true } "n" { return $false }
+                default { Write-Host "Invalid value, expected yes or no"; return Yes $message }
+            }
+        }
+        if ($PSVersionTable.Platform -eq "Unix") {
+            Write-Host "> This script requires PowerShell $requiredPsVersion. Please install it and run this script again."
+            exit 0
+        }
+        $osInfo = Get-WmiObject -Class Win32_OperatingSystem
+        if ($osInfo.ProductType -ne 1) {
+            Write-Host "> This script requires PowerShell $requiredPsVersion. Please install it and run this script again. For instructions, see"
+            Write-Host "https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows" -ForegroundColor Yellow
+            exit 0
+        }
+        $interactive = !([bool]([Environment]::GetCommandLineArgs() -like '-noni*'))
+        if ($interactive) {
+            $response = Yes "> This script requires PowerShell $requiredPsVersion. Do you want to install it now using winget?"
+            if (!$response) {
+                Write-Host "> Aborting"
+                exit 1
+            }
+        }
+        Write-Host "> Installing PowerShell $requiredPsVersion using winget..."
+        winget install Microsoft.PowerShell -h
+        $env:path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    }
+}
+# Launch the Broadcaster Manager with pwsh
 pwsh { irm raw.githubusercontent.com/byheads/bcman/main/bcman.ps1 | iex }
