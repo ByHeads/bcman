@@ -24,7 +24,7 @@ function Get-BroadcasterUrl
     param($instr)
     if ($instr) { $instr = " $instr" }
     $input = Read-Host "> Enter the URL or hostname of the Broadcaster$instr"
-    $input = $input.Trim();
+    $input = $input.Trim()
     if ( $input.StartsWith("@")) {
         # Use input as-is
         $input = $input.SubString(1)
@@ -1212,7 +1212,7 @@ $remoteDeploymentCommands = @(
             return
         }
         Write-Host "Running remote install (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteInstall" @postSettings -Body $body
+        $result = irm "$bc/RemoteInstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
         try {
             Write-RemoteResult $result
             Write-Host
@@ -1267,7 +1267,7 @@ $remoteDeploymentCommands = @(
             return
         }
         Write-Host "Running remote uninstall (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteUninstall" @postSettings -Body $body
+        $result = irm "$bc/RemoteUninstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
         try {
             Write-RemoteResult $result
             Write-Host
@@ -1310,7 +1310,7 @@ $remoteDeploymentCommands = @(
         }
         Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
         $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
-        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 240
+        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 600 -ErrorAction SilentlyContinue
         try {
             Write-RemoteResult $result
             Write-Host
@@ -1377,7 +1377,7 @@ $remoteDeploymentCommands = @(
             return
         }
         Write-Host "Running $command (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue
+        $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 600
         try {
             Write-RemoteResult $result
             Write-Host
