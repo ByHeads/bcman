@@ -29,7 +29,7 @@ function Get-BroadcasterUrl
         # Use input as-is
         $input = $input.SubString(1)
     }
-    elseif (!$input.StartsWith("https://")) {
+    elseif (!$input.StartsWith("http")) {
         # Build from a partial URL or conventional hostname
         if ( $input.Contains(".")) {
             # It's a partial URL
