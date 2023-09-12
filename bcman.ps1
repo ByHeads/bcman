@@ -21,16 +21,16 @@ Write-Host
 #region Setup Broadcaster connection
 function Try-Url
 {
-    param($url, $critical)
+    param($url)
+    if ( $url.StartsWith("http://")) {
+        # Using unencrypted HTTP
+        Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
+        $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
+    }
     try {
         $options = irm $url -Method "OPTIONS" -TimeoutSec 5
         if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
             return $true
-        }
-        if ( $url.StartsWith("http://")) {
-            # Using unencrypted HTTP
-            Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
-            $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
         }
     }
     catch { }
