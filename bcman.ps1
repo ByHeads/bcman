@@ -1,7 +1,7 @@
+param($injectedUrl, $injectedKey)
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     return "Broadcaster Manager requires PowerShell 7 or later"
 }
-
 #region Welcome splash
 
 Write-Host
@@ -19,6 +19,20 @@ Write-Host
 
 #endregion
 #region Setup Broadcaster connection
+function Try-Url
+{
+    param($url)
+    try {
+        $options = irm $url -Method "OPTIONS" -TimeoutSec 5
+        if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
+            return $true
+        }
+    }
+    catch { }
+    Write-Host "Found no Broadcaster API responding at $url. Ensure that the URL was input correctly and that the Broadcaster is running."
+    return $false
+}
+
 function Get-BroadcasterUrl
 {
     param($instr)
@@ -55,21 +69,16 @@ function Get-BroadcasterUrl
         $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
     }
 
-    try {
-        $options = irm $input -Method "OPTIONS" -TimeoutSec 5
-        if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
-            return $input
-        }
+    if (Try-Url $input) {
+        return $input
     }
-    catch { }
-    Write-Host "Found no Broadcaster API responding at $input. Ensure that the URL was input correctly and that the Broadcaster is running."
     return Get-BroadcasterUrl $instr
 }
 
 function Get-ApiKeyCredentials
 {
     $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
-    return New-Object System.Management.Automation.PSCredential ("any", $apiKey)
+    return [PSCredential]::new("any", $apiKey)
 }
 
 function Pad
@@ -84,8 +93,30 @@ function Pad
     return [pscustomobject]$newItem
 }
 
-$bc = Get-BroadcasterUrl
-$credentials = Get-ApiKeyCredentials
+$bc = ""
+if ($injectedUrl) {
+    $bc = $injectedUrl
+    if (!$bc.EndsWith("/api")) {
+        $bc += "/api"
+    }
+    if (!(Try-Url $bc)) {
+        return "Invalid URL given as argument"
+    }
+}
+else {
+    $bc = Get-BroadcasterUrl
+}
+$credentials = $null
+if ($injectedKey) {
+    if ($injectedKey -is [System.Security.SecureString]) {
+        $credentials = [PSCredential]::new("any", $injectedKey)
+    } else {
+        return "Invalid API key given as argument. Expected an instance of System.Security.SecureString"
+    }
+}
+else {
+    $credentials = Get-ApiKeyCredentials
+}
 
 $getSettingsRaw = @{
     Method = "GET"
@@ -809,6 +840,8 @@ $getStatusCommands = @(
             $filter = $results.ReplicationFilter
 
             Write-Host
+            Write-Host "• Using URL: " -NoNewline
+            Write-Host $bc
             Write-Host "• Connected to: " -NoNewLine
             Write-Host $hostName -ForegroundColor Green
             Write-Host "• Broadcaster version: " -NoNewLine
