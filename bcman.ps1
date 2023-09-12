@@ -866,21 +866,21 @@ $getStatusCommands = @(
             $filter = $results.ReplicationFilter
 
             Write-Host
-            Write-Host "• Using URL: " -NoNewline
+            Write-Host "`u{2022} Using URL: " -NoNewline
             Write-Host $bc
-            Write-Host "• Connected to: " -NoNewLine
+            Write-Host "`u{2022} Connected to: " -NoNewLine
             Write-Host $hostName -ForegroundColor Green
-            Write-Host "• Broadcaster version: " -NoNewLine
+            Write-Host "`u{2022} Broadcaster version: " -NoNewLine
             Write-Host $version -ForegroundColor Green
             if ($nextVersion) {
-                Write-Host "• A new version: "  -NoNewline
+                Write-Host "`u{2022} A new version: "  -NoNewline
                 Write-Host $nextVersion -ForegroundColor Magenta -NoNewline
                 Write-Host " is available (see " -NoNewline
                 Write-Host "update" -ForegroundColor Yellow -NoNewline
                 Write-Host ")"
             }
             $notificationsCount = $notifications.Length
-            Write-Host "• You have " -NoNewline
+            Write-Host "`u{2022} You have " -NoNewline
             $color = "Green"
             if ($notificationsCount -gt 0) { $color = "Yellow" }
             $subject = " notification"
@@ -894,14 +894,14 @@ $getStatusCommands = @(
             }
             if ($filter.AllowAll) { }
             elseif ($filter.AllowNone) {
-                Write-Host "• " -NoNewline
+                Write-Host "`u{2022} " -NoNewline
                 Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
                 Write-Host "(see " -NoNewline
                 Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
                 Write-Host ")"
             }
             else {
-                Write-Host "• " -NoNewline
+                Write-Host "`u{2022} " -NoNewline
                 Write-Host "Replication is currently enabled " -NoNewline
                 Write-Host "only for some" -ForegroundColor Yellow -NoNewline
                 Write-Host " recipients (see " -NoNewline
