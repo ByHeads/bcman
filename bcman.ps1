@@ -27,6 +27,11 @@ function Try-Url
         if (($options.Status -eq "success") -and ($options.Data[0].Resource -eq "RESTable.AvailableResource")) {
             return $true
         }
+        if ( $url.StartsWith("http://")) {
+            # Using unencrypted HTTP
+            Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
+            $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
+        }
     }
     catch { }
     Write-Host "Found no Broadcaster API responding at $url. Ensure that the URL was input correctly and that the Broadcaster is running."
@@ -61,12 +66,6 @@ function Get-BroadcasterUrl
     if (![System.Uri]::TryCreate($input, 'Absolute', [ref]$r)) {
         Write-Host "Invalid URI format. Try again."
         return Get-BroadcasterUrl
-    }
-
-    if ( $input.StartsWith("http://")) {
-        # Using unencrypted HTTP
-        Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
-        $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
     }
 
     if (Try-Url $input) {
