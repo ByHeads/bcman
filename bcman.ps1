@@ -1180,6 +1180,7 @@ $remoteDeploymentCommands = @(
         if ($token -eq "") {
             $token = irm "$bcUrl/InstallToken" @getSettingsRaw | % { $_.Token }
         }
+        $token = $token.Trim()
         $uris = @()
         if (Yes "> Should we first uninstall existing client software, if present?") {
             if (Yes "--> Also uninstall legacy (SUS/RA) client software?") {
