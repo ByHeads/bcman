@@ -1176,6 +1176,10 @@ $remoteDeploymentCommands = @(
         Write-Host "This tool will help create a Broadcaster install script!" -ForegroundColor Green
         Write-Host
         $bcUrl = Get-BroadcasterUrl-Ism
+        $hosted = $bcUrl.Contains("heads-api.com") -or $bcUrl.Contains("heads-app.com")
+        if ($hosted) {
+            Write-Host "> This BC is hosted by Heads. If an error occur during install, IP diagnostics will be included in the output"
+        }
         $token = Read-Host "> Now enter the install token (or 'enter' for a new 7 day token)" -MaskInput
         if ($token -eq "") {
             $token = irm "$bcUrl/InstallToken" @getSettingsRaw | % { $_.Token }
@@ -1218,10 +1222,14 @@ $remoteDeploymentCommands = @(
             $uris += "'install/$part'"
         }
         $arr = $uris | Join-String -Separator ","
+        $ip = ""
+        if ($hosted) {
+            $ip = "@`$(irm icanhazip.com)"
+        }
         Write-Host
         Write-Host "# Here's your install script! Run it in PowerShell as administrator on a client computer:"
         Write-Host
-        Write-Host "$arr|%{try{irm('$bcUrl/'+`$_)-He @{Authorization='Bearer $token'}|iex}catch{echo `$_;return}};"
+        Write-Host "$arr|%{try{`$u='$bcUrl/'+`$_;irm(`$u)-He @{Authorization='Bearer $token'}|iex}catch{throw `"`$u|`$(hostname)$ip`$_`"}};"
         Write-Host
         Write-Host "# End of script"
         Write-Host
