@@ -847,1072 +847,1109 @@ function Get-LaunchSchedule
 #endregion
 #region Status
 $getStatusCommands = @(
-@{
-    Command = "Status"
-    Description = "Prints a status overview of the Broadcaster"
-    Action = {
-        try {
-            $results = Get-Batch @{
-                Config = "GET /Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version"
-                NextVersion = "GET /BroadcasterUpdate/_/order_desc=Version&limit=1"
-                Notifications = "GET /NotificationLog"
-                ReplicationFilter = "GET /ReplicationFilter"
-            }
-            $version = $results.Config[0].Version
-            $hostName = $results.Config[0].ComputerName
-            $nextVersion = $null
-            $nextVersion = $results.NextVersion | select -First 1 -Exp Version
-            $notifications = $results.Notifications
-            $filter = $results.ReplicationFilter
+    @{
+        Command = "Status"
+        Description = "Prints a status overview of the Broadcaster"
+        Action = {
+            try {
+                $results = Get-Batch @{
+                    Config = "GET /Config/_/select=Version,ComputerName&rename=General.CurrentVersion->Version"
+                    NextVersion = "GET /BroadcasterUpdate/_/order_desc=Version&limit=1"
+                    Notifications = "GET /NotificationLog"
+                    ReplicationFilter = "GET /ReplicationFilter"
+                }
+                $version = $results.Config[0].Version
+                $hostName = $results.Config[0].ComputerName
+                $nextVersion = $null
+                $nextVersion = $results.NextVersion | select -First 1 -Exp Version
+                $notifications = $results.Notifications
+                $filter = $results.ReplicationFilter
 
-            Write-Host
-            Write-Host "`u{2022} Using URL: " -NoNewline
-            Write-Host $bc
-            Write-Host "`u{2022} Connected to: " -NoNewLine
-            Write-Host $hostName -ForegroundColor Green
-            Write-Host "`u{2022} Broadcaster version: " -NoNewLine
-            Write-Host $version -ForegroundColor Green
-            if ($nextVersion) {
-                Write-Host "`u{2022} A new version: "  -NoNewline
-                Write-Host $nextVersion -ForegroundColor Magenta -NoNewline
-                Write-Host " is available (see " -NoNewline
-                Write-Host "update" -ForegroundColor Yellow -NoNewline
-                Write-Host ")"
-            }
-            $notificationsCount = $notifications.Length
-            Write-Host "`u{2022} You have " -NoNewline
-            $color = "Green"
-            if ($notificationsCount -gt 0) { $color = "Yellow" }
-            $subject = " notification"
-            if ($notificationsCount -ne 1) { $subject = "$subject`s" }
-            Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
-            Write-Host $subject -NoNewline
-            if ($notificationsCount -gt 0) {
-                Write-Host " (see " -NoNewline
-                Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-                Write-Host ")"
-            }
-            if ($filter.AllowAll) { }
-            elseif ($filter.AllowNone) {
-                Write-Host "`u{2022} " -NoNewline
-                Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
-                Write-Host "(see " -NoNewline
-                Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
-                Write-Host ")"
-            }
-            else {
-                Write-Host "`u{2022} " -NoNewline
-                Write-Host "Replication is currently enabled " -NoNewline
-                Write-Host "only for some" -ForegroundColor Yellow -NoNewline
-                Write-Host " recipients (see " -NoNewline
-                Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
-                Write-Host ")"
-            }
-            Write-Host
-        }
-        catch {
-            Write-Host
-        }
-    }
-}
-@{
-    Command = "ReceiverStatus"
-    Description = "Prints the status for all connected Receivers"
-    Action = {
-        $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettingsRaw
-        if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
-        else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
-    }
-}
-@{
-    Command = "ReceiverLog"
-    Description = "Prints the last recorded status for all connected and disconnected Receivers"
-    Action = {
-        $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive,IsConnected" @getSettingsRaw
-        if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
-        else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
-    }
-}
-@{
-    Command = "Config"
-    Description = "Prints the configuration of the Broadcaster"
-    Action = {
-        irm "$bc/Config" @getSettingsRaw | Out-Host
-    }
-}
-@{
-    Command = "DeploymentInfo"
-    Description = "Prints details about deployed software versions on the Broadcaster"
-    Action = {
-        $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettingsRaw
-        if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
-        else { $list | Sort-Object -Property "ProductName" | Out-Host }
-    }
-}
-@{
-    Command = "VersionInfo"
-    Description = "Prints details about a the installed software on Receivers"
-    Action = $versioninfo_c = {
-        $softwareProduct = Get-SoftwareProduct
-        if (!$softwareProduct) {
-            return
-        }
-        $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true" @getSettingsRaw
-        if ($response.Count -eq 0) {
-            Write-Host "Found no connected or disconnected Receivers with $softwareProduct installed"
-            return
-        }
-        $response | % {
-            [pscustomobject]@{
-                WorkstationId = $_.WorkstationId
-                LastActive = $_.LastActive
-                IsRunning = $_.Modules.$softwareProduct.IsRunning
-                CurrentVersion = $_.Modules.$softwareProduct.CurrentVersion
-                DeployedVersions = $_.Modules.$softwareProduct.DeployedVersions | Join-String -Separator ", "
-                LaunchedVersion = $_.Modules.$softwareProduct.LaunchedVersion
-            }
-        } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Format-Table | Out-Host
-        & $versioninfo_c
-    }
-}
-@{
-    Command = "ManualClientInfo"
-    Description = "Prints details about the installed manual WPF clients on Receivers"
-    Action = $manualclientinfo_c = {
-        $response = irm "$bc/ReceiverLog/Modules.WpfClient.ExternalClients.Count>0" @getSettingsRaw
-        if ($response.Count -eq 0) {
-            Write-Host "Found no client computers with installed manual WPF Clients"
-            return
-        }
-        Write-Host
-        foreach ($item in $response) {
-            Write-Host "WorkstationId: $( $item.WorkstationId )"
-            Write-Host "Manual clients:"
-            $item.Modules.WpfClient.ExternalClients | % {
-                Write-Host "  InstallDir: $( $_.InstallDir )"
-                Write-Host "  Version: $( $_.Version )"
-                Write-Host "  IsVersionTracked: $( $_.IsVersionTracked )"
                 Write-Host
-            }
-        }
-    }
-}
-@{
-    Command = "ReplicationInfo"
-    Description = "Prints details about the replication status of Receivers"
-    Action = {
-        $response = irm "$bc/ReceiverLog/modules.replication.isactive=true" @getSettingsRaw
-        if ($response.Count -eq 0) {
-            Write-Host "Found no connected or disconnected Receivers that use replication"
-            return
-        }
-        $response | % {
-            [pscustomobject]@{
-                WorkstationId = $_.WorkstationId
-                LastActive = $_.LastActive
-                ReplicationVersion = $_.Modules.Replication.ReplicationVersion
-                AwaitsInitialization = $_.Modules.Replication.AwaitsInitialization
-            }
-        } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Out-Host
-    }
-}
-@{
-    Command = "ReceiverDetails"
-    Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
-    Action = $receiverDetails_c = {
-        $workstationId = Get-WorkstationId
-        if (!$workstationId) {
-            return
-        }
-        $widLower = $workstationId.ToLower()
-        $widUpper = $workstationId.ToUpper()
-        $response = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper/select=Modules" @getSettingsRaw | Select-Object -first 1
-        if (!$response) {
-            Write-Host "Found no Receiver with workstation ID $workstationId"
-            & $receiverDetails_c
-        }
-        elseif ($response.PSObject.Properties.Count -eq 0) {
-            Write-Host
-            Write-Host "Found no details for $workstationId. Details will sync automatically the next time the Receiver is connected"
-            Write-Host
-        }
-        else {
-            Write-Host
-            $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
-                Write-Host ($_.Name + ":") -ForegroundColor Yellow
-                Write-Host
-                $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
-                $ht = @{ }
-                $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
-                if (($ht.Count -eq 0) -and ($_.Name -eq "Downloads")) {
-                    Write-Host "No download tasks"
+                Write-Host "`u{2022} Using URL: " -NoNewline
+                Write-Host $bc
+                Write-Host "`u{2022} Connected to: " -NoNewLine
+                Write-Host $hostName -ForegroundColor Green
+                Write-Host "`u{2022} Broadcaster version: " -NoNewLine
+                Write-Host $version -ForegroundColor Green
+                if ($nextVersion) {
+                    Write-Host "`u{2022} A new version: "  -NoNewline
+                    Write-Host $nextVersion -ForegroundColor Magenta -NoNewline
+                    Write-Host " is available (see " -NoNewline
+                    Write-Host "update" -ForegroundColor Yellow -NoNewline
+                    Write-Host ")"
+                }
+                $notificationsCount = $notifications.Length
+                Write-Host "`u{2022} You have " -NoNewline
+                $color = "Green"
+                if ($notificationsCount -gt 0) { $color = "Yellow" }
+                $subject = " notification"
+                if ($notificationsCount -ne 1) { $subject = "$subject`s" }
+                Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
+                Write-Host $subject -NoNewline
+                if ($notificationsCount -gt 0) {
+                    Write-Host " (see " -NoNewline
+                    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+                    Write-Host ")"
+                }
+                if ($filter.AllowAll) { }
+                elseif ($filter.AllowNone) {
+                    Write-Host "`u{2022} " -NoNewline
+                    Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
+                    Write-Host "(see " -NoNewline
+                    Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                    Write-Host ")"
                 }
                 else {
-                    foreach ($key in $ht.Keys | Sort-Object) {
-                        $id = $ht[$key] | ConvertTo-Json
-                        Write-Host "$key`: $id"
-                    }
+                    Write-Host "`u{2022} " -NoNewline
+                    Write-Host "Replication is currently enabled " -NoNewline
+                    Write-Host "only for some" -ForegroundColor Yellow -NoNewline
+                    Write-Host " recipients (see " -NoNewline
+                    Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                    Write-Host ")"
                 }
+                Write-Host
+            }
+            catch {
                 Write-Host
             }
         }
     }
-}
-@{
-    Command = "Notifications"
-    Description = "Prints details about current Broadcaster notifications"
-    Action = $notifications_c = {
-        $response = irm "$bc/NotificationLog" @getSettings
-        if ($response.DataCount -eq 0) {
-            Write-Host "The are currently no notifications. Enjoy your day :)"
-            return
+    @{
+        Command = "ReceiverStatus"
+        Description = "Prints the status for all connected Receivers"
+        Action = {
+            $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettingsRaw
+            if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
+            else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
         }
-        $numId = 0
-        [pscustomobject[]]$notifications = $response.Data | % {
-            [pscustomobject]@{
-                Id = ($numId += 1)
-                TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
-                Source = $_.Source
-                Message = $_.Message
-                Hash = $_.Id
+    }
+    @{
+        Command = "ReceiverLog"
+        Description = "Prints the last recorded status for all connected and disconnected Receivers"
+        Action = {
+            $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive,IsConnected" @getSettingsRaw
+            if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
+            else { $list | Sort-Object -Property "WorkstationId" | Out-Host }
+        }
+    }
+    @{
+        Command = "Config"
+        Description = "Prints the configuration of the Broadcaster"
+        Action = {
+            irm "$bc/Config" @getSettingsRaw | Out-Host
+        }
+    }
+    @{
+        Command = "DeploymentInfo"
+        Description = "Prints details about deployed software versions on the Broadcaster"
+        Action = {
+            $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettingsRaw
+            if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
+            else { $list | Sort-Object -Property "ProductName" | Out-Host }
+        }
+    }
+    @{
+        Command = "VersionInfo"
+        Description = "Prints details about a the installed software on Receivers"
+        Action = $versioninfo_c = {
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
+            }
+            $response = irm "$bc/ReceiverLog/modules.$softwareProduct.isinstalled=true" @getSettingsRaw
+            if ($response.Count -eq 0) {
+                Write-Host "Found no connected or disconnected Receivers with $softwareProduct installed"
+                return
+            }
+            $response | % {
+                [pscustomobject]@{
+                    WorkstationId = $_.WorkstationId
+                    LastActive = $_.LastActive
+                    IsRunning = $_.Modules.$softwareProduct.IsRunning
+                    CurrentVersion = $_.Modules.$softwareProduct.CurrentVersion
+                    DeployedVersions = $_.Modules.$softwareProduct.DeployedVersions | Join-String -Separator ", "
+                    LaunchedVersion = $_.Modules.$softwareProduct.LaunchedVersion
+                }
+            } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Format-Table | Out-Host
+            & $versioninfo_c
+        }
+    }
+    @{
+        Command = "ManualClientInfo"
+        Description = "Prints details about the installed manual WPF clients on Receivers"
+        Action = $manualclientinfo_c = {
+            $response = irm "$bc/ReceiverLog/Modules.WpfClient.ExternalClients.Count>0" @getSettingsRaw
+            if ($response.Count -eq 0) {
+                Write-Host "Found no client computers with installed manual WPF Clients"
+                return
+            }
+            Write-Host
+            foreach ($item in $response) {
+                Write-Host "WorkstationId: $( $item.WorkstationId )"
+                Write-Host "Manual clients:"
+                $item.Modules.WpfClient.ExternalClients | % {
+                    Write-Host "  InstallDir: $( $_.InstallDir )"
+                    Write-Host "  Version: $( $_.Version )"
+                    Write-Host "  IsVersionTracked: $( $_.IsVersionTracked )"
+                    Write-Host
+                }
             }
         }
-        $notifications | % { Pad $_ } | Format-Table -AutoSize -Wrap | Out-Host
-        $id = Read-Host "> Enter the ID of a notification to clear it, or enter to continue"
-        $id = $id.Trim() -as [int]
-        if ($id -gt 0) {
-            $match = $notifications | ? { $_.Id -eq $id }
-            if (!$match) {
-                Write-Host "Found no notification with ID $id"
+    }
+    @{
+        Command = "ReplicationInfo"
+        Description = "Prints details about the replication status of Receivers"
+        Action = {
+            $response = irm "$bc/ReceiverLog/modules.replication.isactive=true" @getSettingsRaw
+            if ($response.Count -eq 0) {
+                Write-Host "Found no connected or disconnected Receivers that use replication"
+                return
+            }
+            $response | % {
+                [pscustomobject]@{
+                    WorkstationId = $_.WorkstationId
+                    LastActive = $_.LastActive
+                    ReplicationVersion = $_.Modules.Replication.ReplicationVersion
+                    AwaitsInitialization = $_.Modules.Replication.AwaitsInitialization
+                }
+            } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Out-Host
+        }
+    }
+    @{
+        Command = "ReceiverDetails"
+        Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
+        Action = $receiverDetails_c = {
+            $workstationId = Get-WorkstationId
+            if (!$workstationId) {
+                return
+            }
+            $widLower = $workstationId.ToLower()
+            $widUpper = $workstationId.ToUpper()
+            $response = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper/select=Modules" @getSettingsRaw | Select-Object -first 1
+            if (!$response) {
+                Write-Host "Found no Receiver with workstation ID $workstationId"
+                & $receiverDetails_c
+            }
+            elseif ($response.PSObject.Properties.Count -eq 0) {
+                Write-Host
+                Write-Host "Found no details for $workstationId. Details will sync automatically the next time the Receiver is connected"
+                Write-Host
             }
             else {
-                # The hash is used as ID on the Broadcaster
-                $result = irm "$bc/NotificationLog/Id=$( $match.Hash )" @deleteSettings
-                if ($result.Status -eq "success") {
-                    Write-Host "Notification cleared"
-                } else {
-                    Write-Host "An error occurred while clearing notification with ID $id"
+                Write-Host
+                $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
+                    Write-Host ($_.Name + ":") -ForegroundColor Yellow
+                    Write-Host
+                    $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
+                    $ht = @{ }
+                    $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
+                    if (($ht.Count -eq 0) -and ($_.Name -eq "Downloads")) {
+                        Write-Host "No download tasks"
+                    }
+                    else {
+                        foreach ($key in $ht.Keys | Sort-Object) {
+                            $id = $ht[$key] | ConvertTo-Json
+                            Write-Host "$key`: $id"
+                        }
+                    }
+                    Write-Host
                 }
-                sleep 0.3
-            }
-            & $notifications_c
-        }
-    }
-}
-@{
-    Command = "CheckRetailConnection"
-    Description = "Prints details about the Heads Retail Connection"
-    Action = {
-        $response = irm "$bc/CheckRetailConnection" @getSettingsRaw
-        $status = $response[0].Status
-        switch ($status) {
-            "NotConfigured" {
-                Write-Host "The Heads Retail connection is not configured" -ForegroundColor Yellow
-            }
-            "Connected" {
-                Write-Host "The Heads Retail is connected" -ForegroundColor Green
-            }
-            "Unreachable" {
-                Write-Host "Heads Retail is unreachable. Check the URL field in the RetailConnection section of the Broadcaster configuration" -ForegroundColor Yellow
-            }
-            "Unauthorized" {
-                Write-Host "Cannot authorize with Heads Retail. Check the BasicAuth field in the RetailConnection section of the Broadcaster configuration and make sure that the use exists with the correct access in Heads Retail" -ForegroundColor Yellow
-            }
-            "InternalError" {
-                Write-Host "An internal error occurred when contacting Heads Retail. Check the Broadcaster logs for more information" -ForegroundColor Yellow
             }
         }
     }
-}
+    @{
+        Command = "Notifications"
+        Description = "Prints details about current Broadcaster notifications"
+        Action = $notifications_c = {
+            $response = irm "$bc/NotificationLog" @getSettings
+            if ($response.DataCount -eq 0) {
+                Write-Host "The are currently no notifications. Enjoy your day :)"
+                return
+            }
+            $numId = 0
+            [pscustomobject[]]$notifications = $response.Data | % {
+                [pscustomobject]@{
+                    Id = ($numId += 1)
+                    TimestampUtc = $_.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")
+                    Source = $_.Source
+                    Message = $_.Message
+                    Hash = $_.Id
+                }
+            }
+            $notifications | % { Pad $_ } | Format-Table -AutoSize -Wrap | Out-Host
+            $id = Read-Host "> Enter the ID of a notification to clear it, or enter to continue"
+            $id = $id.Trim() -as [int]
+            if ($id -gt 0) {
+                $match = $notifications | ? { $_.Id -eq $id }
+                if (!$match) {
+                    Write-Host "Found no notification with ID $id"
+                }
+                else {
+                    # The hash is used as ID on the Broadcaster
+                    $result = irm "$bc/NotificationLog/Id=$( $match.Hash )" @deleteSettings
+                    if ($result.Status -eq "success") {
+                        Write-Host "Notification cleared"
+                    } else {
+                        Write-Host "An error occurred while clearing notification with ID $id"
+                    }
+                    sleep 0.3
+                }
+                & $notifications_c
+            }
+        }
+    }
+    @{
+        Command = "CheckRetailConnection"
+        Description = "Prints details about the Heads Retail Connection"
+        Action = {
+            $response = irm "$bc/CheckRetailConnection" @getSettingsRaw
+            $status = $response[0].Status
+            switch ($status) {
+                "NotConfigured" {
+                    Write-Host "The Heads Retail connection is not configured" -ForegroundColor Yellow
+                }
+                "Connected" {
+                    Write-Host "The Heads Retail is connected" -ForegroundColor Green
+                }
+                "Unreachable" {
+                    Write-Host "Heads Retail is unreachable. Check the URL field in the RetailConnection section of the Broadcaster configuration" -ForegroundColor Yellow
+                }
+                "Unauthorized" {
+                    Write-Host "Cannot authorize with Heads Retail. Check the BasicAuth field in the RetailConnection section of the Broadcaster configuration and make sure that the use exists with the correct access in Heads Retail" -ForegroundColor Yellow
+                }
+                "InternalError" {
+                    Write-Host "An internal error occurred when contacting Heads Retail. Check the Broadcaster logs for more information" -ForegroundColor Yellow
+                }
+            }
+        }
+    }
 )
 #endregion
 #region Dashboards
 $dashboardCommands = @(
-@{
-    Command = "SoftwareDashboard"
-    Description = "Presents a live dashboard of the software status of clients"
-    Action = {
-        Write-Host "This command is under development..."
-        $softwareProduct = Get-SoftwareProduct
-        if (!$softwareProduct) {
-            return
-        }
-        $body = @{
-            ReceiverLog = "GET /ReceiverLog"
-            CurrentVersions = "GET /LaunchSchedule.CurrentVersions"
-            Files = "GET /File/ProductName=$softwareProduct/select=Version&distinct=true"
-        } | ConvertTo-Json
-
-        $num = 0
-        while ($true) {
-            $data = Get-Batch $body
-            $listData = $data.ReceiverLog | % {
-                $status = "Up to date"
-                [pscustomobject]@{
-                    Status = "`e[32m$status`e[0m"
-                    WorkstationId = $_.WorkstationId
-                    LastActive = $_.LastActive
-                    ReplicationVersion = $_.Replication.ReplicationVersion
-                    AwaitsInitialization = $_.Replication.AwaitsInitialization
-                    Version = $_.Modules.$softwareProduct.Version
-                }
+    @{
+        Command = "SoftwareDashboard"
+        Description = "Presents a live dashboard of the software status of clients"
+        Action = {
+            Write-Host "This command is under development..."
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
             }
-            cls
-            Write-DashboardHeader "DeploymentDashboard"
-            $listData | % { Pad $_ } | Format-Table | Out-Host
-            if (Quit-Dashboard) { return }
+            $body = @{
+                ReceiverLog = "GET /ReceiverLog"
+                CurrentVersions = "GET /LaunchSchedule.CurrentVersions"
+                Files = "GET /File/ProductName=$softwareProduct/select=Version&distinct=true"
+            } | ConvertTo-Json
+
+            $num = 0
+            while ($true) {
+                $data = Get-Batch $body
+                $listData = $data.ReceiverLog | % {
+                    $status = "Up to date"
+                    [pscustomobject]@{
+                        Status = "`e[32m$status`e[0m"
+                        WorkstationId = $_.WorkstationId
+                        LastActive = $_.LastActive
+                        ReplicationVersion = $_.Replication.ReplicationVersion
+                        AwaitsInitialization = $_.Replication.AwaitsInitialization
+                        Version = $_.Modules.$softwareProduct.Version
+                    }
+                }
+                cls
+                Write-DashboardHeader "DeploymentDashboard"
+                $listData | % { Pad $_ } | Format-Table | Out-Host
+                if (Quit-Dashboard) { return }
+            }
         }
     }
-}
 )
 #endregion
 #region Remote deployment
 $remoteDeploymentCommands = @(
-@{
-    Command = "ISM"
-    Description = "Starts Install Script Maker"
-    Action = {
-        Write-Host
-        Write-Host "This tool will help create a Broadcaster install script!" -ForegroundColor Green
-        Write-Host
-        $bcUrl = Get-BroadcasterUrl-Ism
-        $hosted = $bcUrl.Contains("heads-api.com") -or $bcUrl.Contains("heads-app.com")
-        if ($hosted) {
-            Write-Host "> This BC is hosted by Heads. If an error occur during install, IP diagnostics will be included in the output"
-        }
-        $token = Read-Host "> Now enter the install token (or 'enter' for a new 7 day token)" -MaskInput
-        if ($token -eq "") {
-            $token = irm "$bcUrl/InstallToken" @getSettingsRaw | % { $_.Token }
-        }
-        $token = $token.Trim()
-        $uris = @()
-        if (Yes "> Should we first uninstall existing client software, if present?") {
-            if (Yes "--> Also uninstall legacy (SUS/RA) client software?") {
-                $uris += "'uninstall.legacy'"
-            }
-            $uris += "'uninstall.all'"
-        }
-        if (Yes "> Install Receiver?") {
-            $uris += "'install/p=Receiver'"
-        }
-        $csa = $false
-        if (Yes "> Install WpfClient?") {
-            $part = "p=WpfClient"
-            if (Yes "--> Install as a manual client?") {
-                $label = Label
-                $installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
-                $part += "&installPath=$installPath"
-                $shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
-                $part += "&shortcutLabel=$shortcutLabel"
-            }
-            $part += "&usePosServer=" + (Yes "--> Connect client to local POS Server?")
-            $part += "&useArchiveServer=" + (Yes "--> Connect client to central Archive Server?")
-            $uris += "'install/$part'"
-        }
-        elseif (Yes "> Install CustomerServiceApplication?") {
-            $uris += "'install/p=CustomerServiceApplication'"
-            $csa = $true
-        }
-        if (!$csa -and (Yes "> Install POS Server?")) {
-            $part = "p=PosServer"
-            $part += "&createDump=" + (Yes "--> Create a dump of an existing POS-server?")
-            $part += "&collation=" + (Collation "--> Enter database collation, e.g. sv-SE")
-            $part += "&databaseImageSize=" + (Num "--> Enter database image size in MB (or enter for 1024)" 1024)
-            $part += "&databaseLogSize=" + (Num "--> Enter database log size in MB (or enter for 1024)" 1024)
-            $uris += "'install/$part'"
-        }
-        $arr = $uris | Join-String -Separator ","
-        $ip = ""
-        if ($hosted) {
-            $ip = "@`$(irm icanhazip.com)"
-        }
-        Write-Host
-        Write-Host "# Here's your install script! Run it in PowerShell as administrator on a client computer:"
-        Write-Host
-        Write-Host "$arr|%{try{`$u='$bcUrl/'+`$_;irm(`$u)-He @{Authorization='Bearer $token'}|iex}catch{throw `"`$u|`$(hostname)$ip`$_`"}};"
-        Write-Host
-        Write-Host "# End of script"
-        Write-Host
-        Write-Host "Returning to Broadcaster Manager..." -ForegroundColor Yellow
-        Write-Host
-    }
-}
-@{
-    Command = "Install"
-    Description = "Install or reinstall software on client computers through the Receiver"
-    Action = $install_c = {
-        [string[]]$workstationIds = Get-WorkstationIds "for the clients to install software for"
-        if (!$workstationIds) {
-            return
-        }
-        $workstationIds | Out-Host
-        $softwareProduct = Get-SoftwareProduct
-        if (!$softwareProduct) {
-            return
-        }
-        $pms = @{ }
-        $version = $null
-        $runtimeId = $null
-        $data = @{
-            Workstations = $workstationIds
-            Product = $softwareProduct
-            Parameters = $pms
-        }
-        switch ($softwareProduct) {
-            "WpfClient" {
-                if (Yes "> Install as a manual client?") {
-                    $bcUrl = Get-BroadcasterUrl "to get the manual client from"
-                    $bcUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
-                    $data.BroadcasterUrl = $bcUrl
-                    $token = Read-Host "> Enter the install token to use at $bcUrl " -MaskInput
-                    $data.InstallToken = $token
-                    $label = Label
-                    $pms.shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
-                    $pms.installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
-                    function Get-Version
-                    {
-                        Write-Host "> Note: The version of the manual client used below should be launched at $bcUrl" -ForegroundColor Yellow
-                        $message = "> Enter $softwareProduct version to use or 'cancel' to cancel"
-                        $input = Read-Host $message
-                        $input = $input.Trim()
-                        if ($input -eq "cancel") {
-                            return $null
-                        }
-                        $r = $null
-                        if (![System.Version]::TryParse($input, [ref]$r)) {
-                            Write-Host "Invalid version format. Try again."
-                            return Get-Version
-                        }
-                        return $input
-                    }
-                    $version = Get-Version
-                    if (!$version) {
-                        return
-                    }
-                }
-                $pms.usePosServer = (Yes "> Connect client to local POS Server?")
-                $pms.useArchiveServer = (Yes "> Connect client to central Archive Server?")
-            }
-            "PosServer" {
-                $pms.createDump = (Yes "> Create a dump of an existing POS-server?")
-                $pms.collation = (Collation "> Enter database collation, e.g. sv-SE")
-                $pms.databaseImageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
-                $pms.databaseLogSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
-            }
-            "CustomerServiceApplication" { }
-            default {
-                Write-Host "Can't remote-install $softwareProduct"
-                & $install_c
-                return
-            }
-        }
-        if (!$version) {
-            $version = Get-LaunchedSoftwareProductVersion $softwareProduct
-            if (!$version) {
-                return
-            }
-        }
-        $runtimeId = Get-RuntimeId "to install"
-        if (!$runtimeId) {
-            return
-        }
-        $data.Version = $version.ToString()
-        $data.Runtime = $runtimeId
-
-        $body = $data | ConvertTo-Json
-        Write-Host "> This will install $softwareProduct $version on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
-        $workstationIds | Out-Host
-        if (!(Yes "> Do you want to proceed?")) {
-            Write-Host "Aborted"
-            return
-        }
-        Write-Host "Running remote install (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteInstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
-        try {
-            Write-RemoteResult $result
+    @{
+        Command = "ISM"
+        Description = "Starts Install Script Maker"
+        Action = {
             Write-Host
-            Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
+            Write-Host "This tool will help create a Broadcaster install script!" -ForegroundColor Green
+            Write-Host
+            $bcUrl = Get-BroadcasterUrl-Ism
+            $hosted = $bcUrl.Contains("heads-api.com") -or $bcUrl.Contains("heads-app.com")
+            if ($hosted) {
+                Write-Host "> The URI has the format of a Heads-hosted Broadcaster. If an error occurs during install, IP diagnostics will be included in the output"
+            }
+            $token = Read-Host "> Now enter the install token (or 'enter' for a new 7 day token)" -MaskInput
+            if ($token -eq "") {
+                $token = irm "$bcUrl/InstallToken" @getSettingsRaw | % { $_.Token }
+            }
+            $token = $token.Trim()
+            $uris = @()
+            if (Yes "> Should we first uninstall existing client software, if present?") {
+                if (Yes "--> Also uninstall legacy (SUS/RA) client software?") {
+                    $uris += "'uninstall.legacy'"
+                }
+                $uris += "'uninstall.all'"
+            }
+            if (Yes "> Install Receiver?") {
+                $uris += "'install/p=Receiver'"
+            }
+            $csa = $false
+            if (Yes "> Install WpfClient?") {
+                $part = "p=WpfClient"
+                if (Yes "--> Install as a manual client?") {
+                    $label = Label
+                    $installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
+                    $part += "&installPath=$installPath"
+                    $shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
+                    $part += "&shortcutLabel=$shortcutLabel"
+                }
+                $part += "&usePosServer=" + (Yes "--> Connect client to local POS Server?")
+                $part += "&useArchiveServer=" + (Yes "--> Connect client to central Archive Server?")
+                $uris += "'install/$part'"
+            }
+            elseif (Yes "> Install CustomerServiceApplication?") {
+                $uris += "'install/p=CustomerServiceApplication'"
+                $csa = $true
+            }
+            if (!$csa -and (Yes "> Install POS Server?")) {
+                $part = "p=PosServer"
+                $part += "&createDump=" + (Yes "--> Create a dump of an existing POS-server?")
+                $part += "&collation=" + (Collation "--> Enter database collation, e.g. sv-SE")
+                $part += "&databaseImageSize=" + (Num "--> Enter database image size in MB (or enter for 1024)" 1024)
+                $part += "&databaseLogSize=" + (Num "--> Enter database log size in MB (or enter for 1024)" 1024)
+                $uris += "'install/$part'"
+            }
+            $arr = $uris | Join-String -Separator ","
+            $ip = "+'|'"
+            if ($hosted) {
+                $ip = "+'@'+`$(irm('icanhazip.com'))"
+            }
+            Write-Host
+            Write-Host "# Here's your install script! Run it in PowerShell as administrator on a client computer:"
+            Write-Host
+            Write-Host "$arr|%{try{`$u='$bcUrl/'+`$_;irm(`$u)-He:@{Authorization='Bearer'+[char]0x0020+'$token'}|iex}catch{throw(`$u+'|'+`$(hostname)$ip+`$_)}};"
+            Write-Host
+            Write-Host "# End of script"
+            Write-Host
+            Write-Host "Returning to Broadcaster Manager..." -ForegroundColor Yellow
+            Write-Host
         }
-        catch {
-            Write-Host "An error occurred while remote-installing $softwareProduct"
-            $result | Out-Host
-        }
-        & $install_c
     }
-}
-@{
-    Command = "Uninstall"
-    Description = "Uninstall software on client computers through the Receiver"
-    Action = $uninstall_c = {
-        [string[]]$workstationIds = Get-WorkstationIds "for the clients to uninstall software for"
-        if (!$workstationIds) {
-            return
-        }
-        $data = @{
-            Workstations = $workstationIds
-        }
-        if (Yes "> Uninstall legacy software?") {
-            $data.Legacy = $true
-        } else {
+    @{
+        Command = "Install"
+        Description = "Install or reinstall software on client computers through the Receiver"
+        Action = $install_c = {
+            [string[]]$workstationIds = Get-WorkstationIds "for the clients to install software for"
+            if (!$workstationIds) {
+                return
+            }
+            $workstationIds | Out-Host
             $softwareProduct = Get-SoftwareProduct
             if (!$softwareProduct) {
                 return
             }
+            $pms = @{ }
+            $version = $null
+            $runtimeId = $null
+            $data = @{
+                Workstations = $workstationIds
+                Product = $softwareProduct
+                Parameters = $pms
+            }
             switch ($softwareProduct) {
                 "WpfClient" {
-                    if (Yes "> Uninstall a manual client?") {
-                        $data.ManualClientName = Label $true
+                    if (Yes "> Install as a manual client?") {
+                        $bcUrl = Get-BroadcasterUrl "to get the manual client from"
+                        $bcUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
+                        $data.BroadcasterUrl = $bcUrl
+                        $token = Read-Host "> Enter the install token to use at $bcUrl " -MaskInput
+                        $data.InstallToken = $token
+                        $label = Label
+                        $pms.shortcutLabel = [System.Uri]::EscapeDataString("Heads Retail - $label")
+                        $pms.installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
+                        function Get-Version
+                        {
+                            Write-Host "> Note: The version of the manual client used below should be launched at $bcUrl" -ForegroundColor Yellow
+                            $message = "> Enter $softwareProduct version to use or 'cancel' to cancel"
+                            $input = Read-Host $message
+                            $input = $input.Trim()
+                            if ($input -eq "cancel") {
+                                return $null
+                            }
+                            $r = $null
+                            if (![System.Version]::TryParse($input, [ref]$r)) {
+                                Write-Host "Invalid version format. Try again."
+                                return Get-Version
+                            }
+                            return $input
+                        }
+                        $version = Get-Version
+                        if (!$version) {
+                            return
+                        }
                     }
+                    $pms.usePosServer = (Yes "> Connect client to local POS Server?")
+                    $pms.useArchiveServer = (Yes "> Connect client to central Archive Server?")
                 }
-                "PosServer" { }
+                "PosServer" {
+                    $pms.createDump = (Yes "> Create a dump of an existing POS-server?")
+                    $pms.collation = (Collation "> Enter database collation, e.g. sv-SE")
+                    $pms.databaseImageSize = (Num "> Enter database image size in MB (or enter for 1024)" 1024)
+                    $pms.databaseLogSize = (Num "> Enter database log size in MB (or enter for 1024)" 1024)
+                }
+                "CustomerServiceApplication" { }
                 default {
-                    Write-Host "Can't remote-uninstall $softwareProduct"
-                    & $uninstall_c
+                    Write-Host "Can't remote-install $softwareProduct"
+                    & $install_c
                     return
                 }
             }
-            $data.Product = $softwareProduct
-        }
-        $body = $data | ConvertTo-Json
-
-        Write-Host "> This will uninstall $( $data.Product ?? "legacy software" ) on $( $data.Workstations.Count ) workstations:"
-        $workstationIds | Out-Host
-        if (!(Yes "> Do you want to proceed?")) {
-            Write-Host "Aborted"
-            return
-        }
-        Write-Host "Running remote uninstall (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteUninstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
-        try {
-            Write-RemoteResult $result
-            Write-Host
-            Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
-        }
-        catch {
-            Write-Host "An error occurred while remote-uninstalling $softwareProduct"
-            $result | Out-Host
-        }
-        & $uninstall_c
-    }
-}
-@{
-    Command = "Reset"
-    Description = "Resets one or more POS server databases, optionally also closing their day journals"
-    Action = {
-        [string[]]$workstationIds = Get-WorkstationIds
-        Write-Host "> Selected these workstations for reset:"
-        $workstationIds | Out-Host
-        if (Yes "> Should we close relevant day journals before resetting these workstations?") {
-            $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
-            $posUser = $posUser.Trim()
-            if ($posUser -ieq "cancel") {
+            if (!$version) {
+                $version = Get-LaunchedSoftwareProductVersion $softwareProduct
+                if (!$version) {
+                    return
+                }
+            }
+            $runtimeId = Get-RuntimeId "to install"
+            if (!$runtimeId) {
                 return
             }
-            $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
-            if ($posPassword -ieq "cancel") {
+            $data.Version = $version.ToString()
+            $data.Runtime = $runtimeId
+
+            $body = $data | ConvertTo-Json
+            Write-Host "> This will install $softwareProduct $version on $( $workstationIds.Count ) workstations:" -ForegroundColor Yellow
+            $workstationIds | Out-Host
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
                 return
             }
-        }
-        Write-Host "> This will reset the POS-Server databases on $( $workstationIds.Length ) workstations:"
-        $workstationIds | Out-Host
-        if (!(Yes "> Do you want to proceed?")) {
-            Write-Host "Aborted"
-            return
-        }
-        Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
-        $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
-        $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 600 -ErrorAction SilentlyContinue
-        try {
-            Write-RemoteResult $result
-            Write-Host
-        }
-        catch {
-            Write-Host "An error occurred while running reset"
-            $result | Out-Host
+            Write-Host "Running remote install (this could take a while)" -ForegroundColor Yellow
+            $result = irm "$bc/RemoteInstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
+            try {
+                Write-RemoteResult $result
+                Write-Host
+                Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
+            }
+            catch {
+                Write-Host "An error occurred while remote-installing $softwareProduct"
+                $result | Out-Host
+            }
+            & $install_c
         }
     }
-}
-@{
-    Command = "Control"
-    Description = "Start or stop services and applications on client computers"
-    Action = $control_c = {
-        Write-Host
-        Write-Host "This command can do the following:"
-        Write-Host
-        Write-Host "Start" -ForegroundColor Yellow -NoNewline
-        Write-Host " POS Servers if not already running"
-        Write-Host "Stop" -ForegroundColor Yellow -NoNewline
-        Write-Host " POS Servers and WPF Clients"
-        Write-Host "Restart" -ForegroundColor Yellow -NoNewline
-        Write-Host " running Receivers and POS Servers"
-        Write-Host
+    @{
+        Command = "Uninstall"
+        Description = "Uninstall software on client computers through the Receiver"
+        Action = $uninstall_c = {
+            [string[]]$workstationIds = Get-WorkstationIds "for the clients to uninstall software for"
+            if (!$workstationIds) {
+                return
+            }
+            $data = @{
+                Workstations = $workstationIds
+            }
+            if (Yes "> Uninstall legacy software?") {
+                $data.Legacy = $true
+            } else {
+                $softwareProduct = Get-SoftwareProduct
+                if (!$softwareProduct) {
+                    return
+                }
+                switch ($softwareProduct) {
+                    "WpfClient" {
+                        if (Yes "> Uninstall a manual client?") {
+                            $data.ManualClientName = Label $true
+                        }
+                    }
+                    "PosServer" { }
+                    default {
+                        Write-Host "Can't remote-uninstall $softwareProduct"
+                        & $uninstall_c
+                        return
+                    }
+                }
+                $data.Product = $softwareProduct
+            }
+            $body = $data | ConvertTo-Json
 
-        $command = Read-Host "> Enter a remote command: 'start', 'stop' or 'restart' or 'cancel' to cancel"
-        $command = $command.Trim()
-        if ($command -ieq "cancel") {
-            return
+            Write-Host "> This will uninstall $( $data.Product ?? "legacy software" ) on $( $data.Workstations.Count ) workstations:"
+            $workstationIds | Out-Host
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
+                return
+            }
+            Write-Host "Running remote uninstall (this could take a while)" -ForegroundColor Yellow
+            $result = irm "$bc/RemoteUninstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
+            try {
+                Write-RemoteResult $result
+                Write-Host
+                Write-Host "Note that the new state of installed software may take a minute to update" -ForegroundColor Yellow
+            }
+            catch {
+                Write-Host "An error occurred while remote-uninstalling $softwareProduct"
+                $result | Out-Host
+            }
+            & $uninstall_c
         }
-        if (!($command -in "start", "stop", "restart")) {
-            Write-Host "Invalid remote command '$command'"
-            & $control_c
-            return
+    }
+    @{
+        Command = "Reset"
+        Description = "Resets one or more POS server databases, optionally also closing their day journals"
+        Action = {
+            [string[]]$workstationIds = Get-WorkstationIds
+            Write-Host "> Selected these workstations for reset:"
+            $workstationIds | Out-Host
+            if (Yes "> Should we close relevant day journals before resetting these workstations?") {
+                $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
+                $posUser = $posUser.Trim()
+                if ($posUser -ieq "cancel") {
+                    return
+                }
+                $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
+                if ($posPassword -ieq "cancel") {
+                    return
+                }
+            }
+            Write-Host "> This will reset the POS-Server databases on $( $workstationIds.Length ) workstations:"
+            $workstationIds | Out-Host
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
+                return
+            }
+            Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
+            $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
+            $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 600 -ErrorAction SilentlyContinue
+            try {
+                Write-RemoteResult $result
+                Write-Host
+            }
+            catch {
+                Write-Host "An error occurred while running reset"
+                $result | Out-Host
+            }
         }
-        $softwareProduct = Get-SoftwareProduct
-        if (!$softwareProduct) {
-            return
+    }
+    @{
+        Command = "Control"
+        Description = "Start or stop services and applications on client computers"
+        Action = $control_c = {
+            Write-Host
+            Write-Host "This command can do the following:"
+            Write-Host
+            Write-Host "Start" -ForegroundColor Yellow -NoNewline
+            Write-Host " POS Servers if not already running"
+            Write-Host "Stop" -ForegroundColor Yellow -NoNewline
+            Write-Host " POS Servers and WPF Clients"
+            Write-Host "Restart" -ForegroundColor Yellow -NoNewline
+            Write-Host " running Receivers and POS Servers"
+            Write-Host
+
+            $command = Read-Host "> Enter a remote command: 'start', 'stop' or 'restart' or 'cancel' to cancel"
+            $command = $command.Trim()
+            if ($command -ieq "cancel") {
+                return
+            }
+            if (!($command -in "start", "stop", "restart")) {
+                Write-Host "Invalid remote command '$command'"
+                & $control_c
+                return
+            }
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
+            }
+            if ($command -in ("start", "restart") -and $softwareProduct -eq "WpfClient") {
+                Write-Host "Can't start or restart WPF Clients"
+                & $control_c
+                return
+            }
+            if ($command -in ("start", "stop") -and $softwareProduct -eq "Receiver") {
+                Write-Host "Can't start or stop the Receiver"
+                & $control_c
+                return
+            }
+            [string[]]$workstationIds = Get-WorkstationIds "for the clients to control"
+            if (!$workstationIds) {
+                return
+            }
+            $data = @{
+                Workstations = $workstationIds
+                Command = $command
+                Product = $softwareProduct
+            }
+            $body = $data | ConvertTo-Json
+            Write-Host "> This will $command $softwareProduct on $( $workstationIds.Count ) workstations:"
+            $workstationIds | Out-Host
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
+                return
+            }
+            Write-Host "Running $command (this could take a while)" -ForegroundColor Yellow
+            $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 600
+            try {
+                Write-RemoteResult $result
+                Write-Host
+            }
+            catch {
+                Write-Host "An error occurred while running $command on the given clients"
+                $result | Out-Host
+            }
         }
-        if ($command -in ("start", "restart") -and $softwareProduct -eq "WpfClient") {
-            Write-Host "Can't start or restart WPF Clients"
-            & $control_c
-            return
-        }
-        if ($command -in ("start", "stop") -and $softwareProduct -eq "Receiver") {
-            Write-Host "Can't start or stop the Receiver"
-            & $control_c
-            return
-        }
-        [string[]]$workstationIds = Get-WorkstationIds "for the clients to control"
-        if (!$workstationIds) {
-            return
-        }
-        $data = @{
-            Workstations = $workstationIds
-            Command = $command
-            Product = $softwareProduct
-        }
-        $body = $data | ConvertTo-Json
-        Write-Host "> This will $command $softwareProduct on $( $workstationIds.Count ) workstations:"
-        $workstationIds | Out-Host
-        if (!(Yes "> Do you want to proceed?")) {
-            Write-Host "Aborted"
-            return
-        }
-        Write-Host "Running $command (this could take a while)" -ForegroundColor Yellow
-        $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 600
-        try {
-            Write-RemoteResult $result
+    }
+    @{
+        Command = "InstallToken"
+        Description = "Generates a new install token with a 7 day expiration"
+        Action = {
+            $token = irm "$bc/InstallToken" @getSettingsRaw
+            Write-Host
+            Write-Host "Token:       " -NoNewline
+            Write-Host $token.Token -ForegroundColor Yellow
+            Write-Host "Expires at:  " -NoNewline
+            Write-Host $token.ExpiresAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC") -ForegroundColor Yellow
             Write-Host
         }
-        catch {
-            Write-Host "An error occurred while running $command on the given clients"
-            $result | Out-Host
-        }
     }
-}
-@{
-    Command = "InstallToken"
-    Description = "Generates a new install token with a 7 day expiration"
-    Action = {
-        $token = irm "$bc/InstallToken" @getSettingsRaw
-        Write-Host
-        Write-Host "Token:       " -NoNewline
-        Write-Host $token.Token -ForegroundColor Yellow
-        Write-Host "Expires at:  " -NoNewline
-        Write-Host $token.ExpiresAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC") -ForegroundColor Yellow
-        Write-Host
-    }
-}
 )
 #endregion
 #region Modify
 $modifyCommands = @(
-@{
-    Command = "Forget"
-    Description = "Removes the Receiver log entry for a given workstation"
-    Action = $forget_c = {
-        $workstationId = Get-WorkstationId "for the client that should be forgotten"
-        if (!$workstationId) {
-            return
-        }
-        $widLower = $workstationId.ToLower()
-        $widUpper = $workstationId.ToUpper()
-        $result = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper" @deleteSettings
-        if ($result.Status -eq "success") {
-            if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
-            else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
-        }
-        else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
-        & $forget_c
-    }
-}
-@{
-    Command = "Deploy"
-    Description = "Lists and downloads deployable software versions to the Broadcaster"
-    Action = $deploy_c = {
-        $softwareProduct = Get-SoftwareProduct
-        if (!$softwareProduct) {
-            return
-        }
-        $version = Get-DeployableSoftwareProductVersion $softwareProduct
-        if (!$version) {
-            return
-        }
-        $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
-        $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
-        Write-Host
-        Write-Host "Downloading $softwareProduct $version to the Broadcaster. Be patient..." -ForegroundColor Yellow
-        $body = @{ Deploy = $true } | ConvertTo-Json
-        $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/offset=-4&unsafe=true" -Body $body @patchSettings
-        if ($result.Status -eq "success") {
-            if ($result.DataCount -eq 0) {
-                Write-Host "No version was deployed. Please ensure that version $version of $softwareProduct is deployable." -ForegroundColor Red
-                & $deploy_c
-            } else {
-                Write-Host "Success!" -ForegroundColor Green
+    @{
+        Command = "Forget"
+        Description = "Removes the Receiver log entry for a given workstation"
+        Action = $forget_c = {
+            $workstationId = Get-WorkstationId "for the client that should be forgotten"
+            if (!$workstationId) {
+                return
             }
+            $widLower = $workstationId.ToLower()
+            $widUpper = $workstationId.ToUpper()
+            $result = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper" @deleteSettings
+            if ($result.Status -eq "success") {
+                if ($result.DeletedCount -gt 0) { Write-Host "$workstationId was forgotten" }
+                else { Write-Host "Found no Receiver log entry with workstation ID $workstationId" }
+            }
+            else { Write-Host "An error occurred while removing a Receiver log entry for workstation with ID $workstationId" }
+            & $forget_c
         }
-        else {
-            Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
-            Write-Host $result
-        }
-        Write-Host
-        & $deploy_c
     }
-}
-@{
-    Command = "Launch"
-    Description = "Lists launchable software versions and schedules launches"
-    Action = $launch_c = {
-        $message = "> Enter 'list' to list and edit scheduled launches, 'schedule' to schedule a new launch or 'cancel' to cancel"
-        $input = Read-Host $message
-        if ($input -ieq "list") {
-            Get-LaunchSchedule
-            & $launch_c
-            return
-        }
-        if ($input -ieq "schedule") {
+    @{
+        Command = "Deploy"
+        Description = "Lists and downloads deployable software versions to the Broadcaster"
+        Action = $deploy_c = {
             $softwareProduct = Get-SoftwareProduct
             if (!$softwareProduct) {
                 return
             }
-            $version = Get-LaunchableSoftwareProductVersion $softwareProduct
+            $version = Get-DeployableSoftwareProductVersion $softwareProduct
             if (!$version) {
                 return
             }
-            $runtimeId = Get-RuntimeId "to launch"
-            if (!$runtimeId) {
-                return
-            }
-            $datetime = Get-DateTime
-            if (!$datetime) {
-                return
-            }
-            $body = @{
-                ProductName = $softwareProduct
-                Version = $version.ToString()
-                RuntimeId = $runtimeId
-                DateTime = [datetime]$datetime
-            } | ConvertTo-Json
-            $result = irm "$bc/LaunchSchedule" -Body $body @postSettings
+            $ma = $version.Major; $mi = $version.Minor; $b = $version.Build; $r = $version.Revision
+            $versionConditions = "version.major=$ma&version.minor=$mi&version.build=$b&version.revision=$r"
+            Write-Host
+            Write-Host "Downloading $softwareProduct $version to the Broadcaster. Be patient..." -ForegroundColor Yellow
+            $body = @{ Deploy = $true } | ConvertTo-Json
+            $result = irm "$bc/RemoteFile/ProductName=$softwareProduct&$versionConditions/offset=-4&unsafe=true" -Body $body @patchSettings
             if ($result.Status -eq "success") {
                 if ($result.DataCount -eq 0) {
-                    Write-Host "No new launch was scheduled. There is likely an earlier launch with the same or a higher version."
-                    & $launch_c
+                    Write-Host "No version was deployed. Please ensure that version $version of $softwareProduct is deployable." -ForegroundColor Red
+                    & $deploy_c
                 } else {
-                    Write-Host "A launch was successfully scheduled"
-                    & $launch_c
+                    Write-Host "Success!" -ForegroundColor Green
                 }
             }
             else {
-                Write-Host "An error occured while scheduling launch"
+                Write-Host "An error occured while deploying $softwareProduct $version. This version might be partially deployed. Partially deployed versions are not deployed to clients"
                 Write-Host $result
-                & $launch_c
             }
-        }
-        if ($input -ieq "cancel") {
-            return
+            Write-Host
+            & $deploy_c
         }
     }
-}
-@{
-    Command = "RemoteFolders"
-    Description = "Lists and assigns remote folders on the build output share, from where the BC can deploy client software versions"
-    Action = $remotefolders_c = {
-        $input = Read-Host "> Enter 'list' to list the remote folders, 'add' or 'remove' to edit the list or 'cancel' to cancel"
-        switch ( $input.Trim().ToLower()) {
-            "cancel" { return }
-            "list" {
-                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                if ($folders.Count -eq 0) {
-                    Write-Host "There are no assigned remote directories"
-                } else {
-                    Write-Host
-                    $folders | Out-Host
-                    Write-Host
-                }
-                & $remotefolders_c
+    @{
+        Command = "Launch"
+        Description = "Lists launchable software versions and schedules launches"
+        Action = $launch_c = {
+            $message = "> Enter 'list' to list and edit scheduled launches, 'schedule' to schedule a new launch or 'cancel' to cancel"
+            $input = Read-Host $message
+            if ($input -ieq "list") {
+                Get-LaunchSchedule
+                & $launch_c
+                return
             }
-            "add" {
-                $folder = Get-RemoteFolder
-                [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                $folders += $folder
-                $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
-                $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
+            if ($input -ieq "schedule") {
+                $softwareProduct = Get-SoftwareProduct
+                if (!$softwareProduct) {
+                    return
+                }
+                $version = Get-LaunchableSoftwareProductVersion $softwareProduct
+                if (!$version) {
+                    return
+                }
+                $runtimeId = Get-RuntimeId "to launch"
+                if (!$runtimeId) {
+                    return
+                }
+                $datetime = Get-DateTime
+                if (!$datetime) {
+                    return
+                }
+                $body = @{
+                    ProductName = $softwareProduct
+                    Version = $version.ToString()
+                    RuntimeId = $runtimeId
+                    DateTime = [datetime]$datetime
+                } | ConvertTo-Json
+                $result = irm "$bc/LaunchSchedule" -Body $body @postSettings
                 if ($result.Status -eq "success") {
-                    Write-Host "$folder was added" -ForegroundColor Green
-                } else {
-                    Write-Host "An error occured while adding $folder to the assigned remote folder list"
-                }
-                & $remotefolders_c
-            }
-            "remove" {
-                $folder = Get-RemoteFolder
-                [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                $removed = $folders.Remove($folder)
-                if (!$removed) {
-                    Write-Host "$folder is not an assigned remote folder"
-                    & $remotefolders_c
+                    if ($result.DataCount -eq 0) {
+                        Write-Host "No new launch was scheduled. There is likely an earlier launch with the same or a higher version."
+                        & $launch_c
+                    } else {
+                        Write-Host "A launch was successfully scheduled"
+                        & $launch_c
+                    }
                 }
                 else {
+                    Write-Host "An error occured while scheduling launch"
+                    Write-Host $result
+                    & $launch_c
+                }
+            }
+            if ($input -ieq "cancel") {
+                return
+            }
+        }
+    }
+    @{
+        Command = "RemoteFolders"
+        Description = "Lists and assigns remote folders on the build output share, from where the BC can deploy client software versions"
+        Action = $remotefolders_c = {
+            $input = Read-Host "> Enter 'list' to list the remote folders, 'add' or 'remove' to edit the list or 'cancel' to cancel"
+            switch ( $input.Trim().ToLower()) {
+                "cancel" { return }
+                "list" {
+                    [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
+                    if ($folders.Count -eq 0) {
+                        Write-Host "There are no assigned remote directories"
+                    } else {
+                        Write-Host
+                        $folders | Out-Host
+                        Write-Host
+                    }
+                    & $remotefolders_c
+                }
+                "add" {
+                    $folder = Get-RemoteFolder
+                    [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
+                    $folders += $folder
                     $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
                     $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
                     if ($result.Status -eq "success") {
-                        Write-Host "$folder was removed"  -ForegroundColor Green
+                        Write-Host "$folder was added" -ForegroundColor Green
                     } else {
-                        Write-Host "An error occured while removing $folder from the assigned remote folder list"
+                        Write-Host "An error occured while adding $folder to the assigned remote folder list"
                     }
+                    & $remotefolders_c
                 }
-                & $remotefolders_c
-            }
-            default { & $remotefolders_c }
-        }
-    }
-}
-@{
-    Command = "ReplicationFilter"
-    Description = "View and edit the Replication filter, defining the enabled replication recipients"
-    Action = $replicationfilter_c = {
-        $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
-        if ($filter.AllowAll) {
-            Write-Host "Replication is currently enabled for all recipients" -ForegroundColor Green
-        }
-        elseif ($filter.AllowNone) {
-            Write-Host "Replication is currently disabled for all recipients" -ForegroundColor Red
-        }
-        else {
-            Write-Host "Replication is currently enabled ONLY for the following recipients:" -ForegroundColor Yellow
-            $filter.EnabledRecipients | Out-Host
-        }
-        $input = Read-Host "> Enter 'enable' to enable for all, 'disable' to disable for all, 'edit' to manage enabled recipients or 'enter' to continue"
-        $input = $input.Trim().ToLower()
-        $body = $null
-        switch ($input) {
-            "enable" {
-                $body = @{ EnabledRecipients = @("*") } | ConvertTo-Json
-                break
-            }
-            "disable" {
-                $body = @{ EnabledRecipients = @() } | ConvertTo-Json
-                break
-            }
-            "edit" {
-                Write-Host "Replication recipients can be workstation IDs or group names" -ForegroundColor Yellow
-                [string[]]$recipients = Get-WorkstationIds
-                $body = @{ EnabledRecipients = $recipients } | ConvertTo-Json
-                break
-            }
-            default { return }
-        }
-        $result = irm "$bc/ReplicationFilter" -Body $body @patchSettings
-        if ($result.Status -eq "success") {
-        } else {
-            Write-Host "An error occured while updating the replication filter"
-        }
-        & $replicationfilter_c
-    }
-}
-@{
-    Command = "Groups"
-    Description = "Lists and assigns workstation group members"
-    Action = $groups_c = {
-        $group = Get-WorkstationGroup
-        if (!$group) {
-            return
-        }
-        Manage-WorkstationGroup $group
-        & $groups_c
-    }
-}
-@{
-    Command = "Update"
-    Description = "Updates the Broadcaster to a new version"
-    Action = {
-        $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
-        $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
-        if (!$nextAvailable) {
-            Write-Host "> This Broadcaster is already running the latest version " -NoNewline
-            Write-Host $version -ForegroundColor Green -NoNewline
-            Write-Host
-            return
-        }
-        Write-Host "> This Broadcaster is running version " -NoNewline
-        Write-Host $version -ForegroundColor Yellow -NoNewline
-        Write-Host ". A new version " -NoNewline
-        Write-Host $nextAvailable.Version -ForegroundColor Magenta -NoNewline
-        Write-Host " is available!"
-        $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
-        $response = $response.Trim().ToLower()
-        if ($response -ieq "update") {
-            $fullName = [System.Uri]::EscapeDataString($nextAvailable.FullName)
-            $body = @{ Install = $true } | ConvertTo-Json
-            $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
-            Write-Host "> Updating Broadcaster to version " -NoNewline
-            Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
-            Write-Host " " -NoNewline
-            while ($true) {
-                Write-Host "." -NoNewline -ForegroundColor Gray
-                $interval = Start-Sleep 2 &
-                try {
-                    $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
-                    if ($currentVersion -eq $nextAvailable.Version) {
-                        Write-Host " Done!" -ForegroundColor Green -NoNewline
-                        Write-Host
-                        break
+                "remove" {
+                    $folder = Get-RemoteFolder
+                    [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
+                    $removed = $folders.Remove($folder)
+                    if (!$removed) {
+                        Write-Host "$folder is not an assigned remote folder"
+                        & $remotefolders_c
                     }
+                    else {
+                        $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
+                        $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
+                        if ($result.Status -eq "success") {
+                            Write-Host "$folder was removed"  -ForegroundColor Green
+                        } else {
+                            Write-Host "An error occured while removing $folder from the assigned remote folder list"
+                        }
+                    }
+                    & $remotefolders_c
                 }
-                catch { }
-                Receive-Job $interval -Wait
+                default { & $remotefolders_c }
             }
         }
     }
-}
+    @{
+        Command = "ReplicationFilter"
+        Description = "View and edit the Replication filter, defining the enabled replication recipients"
+        Action = $replicationfilter_c = {
+            $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
+            if ($filter.AllowAll) {
+                Write-Host "Replication is currently enabled for all recipients" -ForegroundColor Green
+            }
+            elseif ($filter.AllowNone) {
+                Write-Host "Replication is currently disabled for all recipients" -ForegroundColor Red
+            }
+            else {
+                Write-Host "Replication is currently enabled ONLY for the following recipients:" -ForegroundColor Yellow
+                $filter.EnabledRecipients | Out-Host
+            }
+            $input = Read-Host "> Enter 'enable' to enable for all, 'disable' to disable for all, 'edit' to manage enabled recipients or 'enter' to continue"
+            $input = $input.Trim().ToLower()
+            $body = $null
+            switch ($input) {
+                "enable" {
+                    $body = @{ EnabledRecipients = @("*") } | ConvertTo-Json
+                    break
+                }
+                "disable" {
+                    $body = @{ EnabledRecipients = @() } | ConvertTo-Json
+                    break
+                }
+                "edit" {
+                    Write-Host "Replication recipients can be workstation IDs or group names" -ForegroundColor Yellow
+                    [string[]]$recipients = Get-WorkstationIds
+                    $body = @{ EnabledRecipients = $recipients } | ConvertTo-Json
+                    break
+                }
+                default { return }
+            }
+            $result = irm "$bc/ReplicationFilter" -Body $body @patchSettings
+            if ($result.Status -eq "success") {
+            } else {
+                Write-Host "An error occured while updating the replication filter"
+            }
+            & $replicationfilter_c
+        }
+    }
+    @{
+        Command = "Groups"
+        Description = "Lists and assigns workstation group members"
+        Action = $groups_c = {
+            $group = Get-WorkstationGroup
+            if (!$group) {
+                return
+            }
+            Manage-WorkstationGroup $group
+            & $groups_c
+        }
+    }
+    @{
+        Command = "Update"
+        Description = "Updates the Broadcaster to a new version"
+        Action = {
+            $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
+            $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
+            if (!$nextAvailable) {
+                Write-Host "> This Broadcaster is already running the latest version " -NoNewline
+                Write-Host $version -ForegroundColor Green -NoNewline
+                Write-Host
+                return
+            }
+            Write-Host "> This Broadcaster is running version " -NoNewline
+            Write-Host $version -ForegroundColor Yellow -NoNewline
+            Write-Host ". A new version " -NoNewline
+            Write-Host $nextAvailable.Version -ForegroundColor Magenta -NoNewline
+            Write-Host " is available!"
+            $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
+            $response = $response.Trim().ToLower()
+            if ($response -ieq "update") {
+                $fullName = [System.Uri]::EscapeDataString($nextAvailable.FullName)
+                $body = @{ Install = $true } | ConvertTo-Json
+                $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
+                Write-Host "> Updating Broadcaster to version " -NoNewline
+                Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
+                Write-Host " " -NoNewline
+                while ($true) {
+                    Write-Host "." -NoNewline -ForegroundColor Gray
+                    $interval = Start-Sleep 2 &
+                    try {
+                        $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
+                        if ($currentVersion -eq $nextAvailable.Version) {
+                            Write-Host " Done!" -ForegroundColor Green -NoNewline
+                            Write-Host
+                            break
+                        }
+                    }
+                    catch { }
+                    Receive-Job $interval -Wait
+                }
+            }
+        }
+    }
+    @{
+        Command = "UpdateDependencies"
+        Description = "Updates the Broadcaster dependencies to a new or existing version"
+        Action = {
+            $status = (irm "$bc/DependencyStatus/" @getSettingsRaw)[0]
+            $nextAvailable = (irm "$bc/DependencyUpdate" @getSettingsRaw)[0]
+            Write-Host "> This Broadcaster is running version " -NoNewline
+            Write-Host $version -ForegroundColor Yellow -NoNewline
+            Write-Host ". A new version " -NoNewline
+            Write-Host $nextAvailable.Version -ForegroundColor Magenta -NoNewline
+            Write-Host " is available!"
+            $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
+            $response = $response.Trim().ToLower()
+            if ($response -ieq "update") {
+                $fullName = [System.Uri]::EscapeDataString($nextAvailable.FullName)
+                $body = @{ Install = $true } | ConvertTo-Json
+                $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
+                Write-Host "> Updating Broadcaster to version " -NoNewline
+                Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
+                Write-Host " " -NoNewline
+                while ($true) {
+                    Write-Host "." -NoNewline -ForegroundColor Gray
+                    $interval = Start-Sleep 2 &
+                    try {
+                        $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
+                        if ($currentVersion -eq $nextAvailable.Version) {
+                            Write-Host " Done!" -ForegroundColor Green -NoNewline
+                            Write-Host
+                            break
+                        }
+                    }
+                    catch { }
+                    Receive-Job $interval -Wait
+                }
+            }
+        }
+    }
 )
 #endregion
 #region Terminals
 $launchTerminalsCommands = @(
-@{
-    Command = "LaunchCommands"
-    Description = "Enters the Broadcaster LaunchCommands terminal"
-    Action = { Enter-Terminal "LaunchCommands" }
-}
-@{
-    Command = "AccessToken"
-    Description = "Enters the Broadcaster access token terminal"
-    Action = { Enter-Terminal "AccessToken.Commands" }
-}
-@{
-    Command = "Shell"
-    Description = "Enters the Broadcaster shell terminal"
-    Action = { Enter-Terminal "Shell" }
-}
-@{
-    Command = "Terminal"
-    Description = "Enters a Broadcaster terminal"
-    Action = { Enter-Terminal (Get-Terminal) }
-}
+    @{
+        Command = "LaunchCommands"
+        Description = "Enters the Broadcaster LaunchCommands terminal"
+        Action = { Enter-Terminal "LaunchCommands" }
+    }
+    @{
+        Command = "AccessToken"
+        Description = "Enters the Broadcaster access token terminal"
+        Action = { Enter-Terminal "AccessToken.Commands" }
+    }
+    @{
+        Command = "Shell"
+        Description = "Enters the Broadcaster shell terminal"
+        Action = { Enter-Terminal "Shell" }
+    }
+    @{
+        Command = "Terminal"
+        Description = "Enters a Broadcaster terminal"
+        Action = { Enter-Terminal (Get-Terminal) }
+    }
 )
 #endregion
 #region Other
 $global:fireworks = $false
 $otherCommands = @(
-@{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
-@{
-    Command = "Exit"
-    Description = "Closes the Broadcaster Manager"
-    Action = {
-        if ($global:beaver) {
-            Write-Host "> Detaching beaver. Be patient..."
-            Start-Sleep 3
-            Write-Host "> The beaver has been safely detached"
+    @{ Command = "Help"; Description = "Prints the commands list"; Action = { WriteAll-Commands } }
+    @{
+        Command = "Exit"
+        Description = "Closes the Broadcaster Manager"
+        Action = {
+            if ($global:beaver) {
+                Write-Host "> Detaching beaver. Be patient..."
+                Start-Sleep 3
+                Write-Host "> The beaver has been safely detached"
+            }
+            Write-Host "> Exiting..."
+            Exit
         }
-        Write-Host "> Exiting..."
-        Exit
     }
-}
-@{
-    Command = "Fireworks"
-    Description = "Perfect for various celebrations"
-    Action = {
-        if ($global:fireworks) {
-            Write-Host "Less celebration, more motivation! You've had your fun..."
+    @{
+        Command = "Fireworks"
+        Description = "Perfect for various celebrations"
+        Action = {
+            if ($global:fireworks) {
+                Write-Host "Less celebration, more motivation! You've had your fun..."
+                Start-Sleep 1
+                return
+            }
+            $global:fireworks = $true
+            cls
+            Write-Host
+            Write-Host
             Start-Sleep 1
-            return
+            cls
+            Write-Host
+            Write-Host
+            Write-Host "       ####### " -ForegroundColor Red
+            Write-Host "      ##     ##" -ForegroundColor Red
+            Write-Host "             ##" -ForegroundColor Red
+            Write-Host "       ####### " -ForegroundColor Red
+            Write-Host "             ##" -ForegroundColor Red
+            Write-Host "      ##     ##" -ForegroundColor Red
+            Write-Host "       ####### " -ForegroundColor Red
+            Write-Host
+            Write-Host
+            Start-Sleep 1
+            cls
+            Write-Host
+            Write-Host
+            Write-Host "       ####### " -ForegroundColor Yellow
+            Write-Host "      ##     ##" -ForegroundColor Yellow
+            Write-Host "             ##" -ForegroundColor Yellow
+            Write-Host "       ####### " -ForegroundColor Yellow
+            Write-Host "      ##       " -ForegroundColor Yellow
+            Write-Host "      ##       " -ForegroundColor Yellow
+            Write-Host "      #########" -ForegroundColor Yellow
+            Write-Host
+            Write-Host
+            Start-Sleep 1
+            cls
+            Write-Host
+            Write-Host
+            Write-Host "          ##   " -ForegroundColor Green
+            Write-Host "        ####   " -ForegroundColor Green
+            Write-Host "          ##   " -ForegroundColor Green
+            Write-Host "          ##   " -ForegroundColor Green
+            Write-Host "          ##   " -ForegroundColor Green
+            Write-Host "          ##   " -ForegroundColor Green
+            Write-Host "        ###### " -ForegroundColor Green
+            Write-Host
+            Write-Host
+            Start-Sleep 1
+            cls
+            Write-Host
+            Write-Host "               *    *" -ForegroundColor Red
+            Write-Host "   *         `'       *       .  *   `'     .           * *" -ForegroundColor Yellow
+            Write-Host "                                                               `'" -ForegroundColor Red
+            Write-Host "       *                *`'          *          *        `'" -ForegroundColor Green
+            Write-Host "   .           *               |               /" -ForegroundColor Red
+            Write-Host "               `'.         |    |      `'       |   `'     *" -ForegroundColor Yellow
+            Write-Host "                 \*        \   \             /" -ForegroundColor Green
+            Write-Host "       `'          \     `'* |    |  *        |*                *  *" -ForegroundColor Red
+            Write-Host "            *      ``.       \   |     *     /    *      `'" -ForegroundColor Blue
+            Write-Host "  .                  \      |   \          /               *" -ForegroundColor Yellow
+            Write-Host "     *`'  *     `'      \      \   `'.       |" -ForegroundColor Red
+            Write-Host "        -._            ``                  /         *" -ForegroundColor Blue
+            Write-Host "  `' `'      ````._   *                           `'          .      `'" -ForegroundColor Green
+            Write-Host "   *           *\*          * .   .      *" -ForegroundColor Yellow
+            Write-Host "*  `'        *    ``-._                       .         _..:=`'        *" -ForegroundColor Red
+            Write-Host "             .  `'      *       *    *   .       _.:--`'" -ForegroundColor Blue
+            Write-Host "          *           .     .     *         .-`'         *" -ForegroundColor Green
+            Write-Host "   .               `'             . `'   *           *         ." -ForegroundColor Red
+            Write-Host "  *       ___.-=--..-._     *                `'               `'" -ForegroundColor Yellow
+            Write-Host "                                  *       *" -ForegroundColor Red
+            Write-Host "                *        _.`'  .`'       ``.        `'  *             *" -ForegroundColor Blue
+            Write-Host "     *              *_.-`'   .`'            ``.               *" -ForegroundColor Green
+            Write-Host "                   .`'                       ``._             *  `'" -ForegroundColor Yellow
+            Write-Host "   `'       `'                        .       .  ``.     ." -ForegroundColor Green
+            Write-Host "       .                      *                  ``" -ForegroundColor Blue
+            Write-Host "               *        `'             `'                          ." -ForegroundColor Red
+            Write-Host "     .                          *        .           *  *" -ForegroundColor Yellow
+            Write-Host "             *        .                                    `'" -ForegroundColor Green
+            Write-Host
+            if ($global:beaver) {
+                Write-Host "The beaver is going wild!"
+            }
+            Start-Sleep 2
+            cls
+            Write-Host
+            Write-Host "OK, that's it. Back to work!"
+            Write-Host
         }
-        $global:fireworks = $true
-        cls
-        Write-Host
-        Write-Host
-        Start-Sleep 1
-        cls
-        Write-Host
-        Write-Host
-        Write-Host "       ####### " -ForegroundColor Red
-        Write-Host "      ##     ##" -ForegroundColor Red
-        Write-Host "             ##" -ForegroundColor Red
-        Write-Host "       ####### " -ForegroundColor Red
-        Write-Host "             ##" -ForegroundColor Red
-        Write-Host "      ##     ##" -ForegroundColor Red
-        Write-Host "       ####### " -ForegroundColor Red
-        Write-Host
-        Write-Host
-        Start-Sleep 1
-        cls
-        Write-Host
-        Write-Host
-        Write-Host "       ####### " -ForegroundColor Yellow
-        Write-Host "      ##     ##" -ForegroundColor Yellow
-        Write-Host "             ##" -ForegroundColor Yellow
-        Write-Host "       ####### " -ForegroundColor Yellow
-        Write-Host "      ##       " -ForegroundColor Yellow
-        Write-Host "      ##       " -ForegroundColor Yellow
-        Write-Host "      #########" -ForegroundColor Yellow
-        Write-Host
-        Write-Host
-        Start-Sleep 1
-        cls
-        Write-Host
-        Write-Host
-        Write-Host "          ##   " -ForegroundColor Green
-        Write-Host "        ####   " -ForegroundColor Green
-        Write-Host "          ##   " -ForegroundColor Green
-        Write-Host "          ##   " -ForegroundColor Green
-        Write-Host "          ##   " -ForegroundColor Green
-        Write-Host "          ##   " -ForegroundColor Green
-        Write-Host "        ###### " -ForegroundColor Green
-        Write-Host
-        Write-Host
-        Start-Sleep 1
-        cls
-        Write-Host
-        Write-Host "               *    *" -ForegroundColor Red
-        Write-Host "   *         `'       *       .  *   `'     .           * *" -ForegroundColor Yellow
-        Write-Host "                                                               `'" -ForegroundColor Red
-        Write-Host "       *                *`'          *          *        `'" -ForegroundColor Green
-        Write-Host "   .           *               |               /" -ForegroundColor Red
-        Write-Host "               `'.         |    |      `'       |   `'     *" -ForegroundColor Yellow
-        Write-Host "                 \*        \   \             /" -ForegroundColor Green
-        Write-Host "       `'          \     `'* |    |  *        |*                *  *" -ForegroundColor Red
-        Write-Host "            *      ``.       \   |     *     /    *      `'" -ForegroundColor Blue
-        Write-Host "  .                  \      |   \          /               *" -ForegroundColor Yellow
-        Write-Host "     *`'  *     `'      \      \   `'.       |" -ForegroundColor Red
-        Write-Host "        -._            ``                  /         *" -ForegroundColor Blue
-        Write-Host "  `' `'      ````._   *                           `'          .      `'" -ForegroundColor Green
-        Write-Host "   *           *\*          * .   .      *" -ForegroundColor Yellow
-        Write-Host "*  `'        *    ``-._                       .         _..:=`'        *" -ForegroundColor Red
-        Write-Host "             .  `'      *       *    *   .       _.:--`'" -ForegroundColor Blue
-        Write-Host "          *           .     .     *         .-`'         *" -ForegroundColor Green
-        Write-Host "   .               `'             . `'   *           *         ." -ForegroundColor Red
-        Write-Host "  *       ___.-=--..-._     *                `'               `'" -ForegroundColor Yellow
-        Write-Host "                                  *       *" -ForegroundColor Red
-        Write-Host "                *        _.`'  .`'       ``.        `'  *             *" -ForegroundColor Blue
-        Write-Host "     *              *_.-`'   .`'            ``.               *" -ForegroundColor Green
-        Write-Host "                   .`'                       ``._             *  `'" -ForegroundColor Yellow
-        Write-Host "   `'       `'                        .       .  ``.     ." -ForegroundColor Green
-        Write-Host "       .                      *                  ``" -ForegroundColor Blue
-        Write-Host "               *        `'             `'                          ." -ForegroundColor Red
-        Write-Host "     .                          *        .           *  *" -ForegroundColor Yellow
-        Write-Host "             *        .                                    `'" -ForegroundColor Green
-        Write-Host
-        if ($global:beaver) {
-            Write-Host "The beaver is going wild!"
-        }
-        Start-Sleep 2
-        cls
-        Write-Host
-        Write-Host "OK, that's it. Back to work!"
-        Write-Host
     }
-}
 )
 function Write-Commands
 {
