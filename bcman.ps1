@@ -1178,7 +1178,7 @@ $remoteDeploymentCommands = @(
             $bcUrl = Get-BroadcasterUrl-Ism
             $hosted = $bcUrl.Contains("heads-api.com") -or $bcUrl.Contains("heads-app.com")
             if ($hosted) {
-                Write-Host "> The URI has the format of a Heads-hosted Broadcaster. If an error occurs during install, IP diagnostics will be included in the output"
+                Write-Host "The URI has the format of a Heads-hosted Broadcaster. If an error occurs during install, IP diagnostics will be included in the output" -ForegroundColor Yellow
             }
             $token = Read-Host "> Now enter the install token (or 'enter' for a new 7 day token)" -MaskInput
             if ($token -eq "") {
@@ -1198,6 +1198,7 @@ $remoteDeploymentCommands = @(
             $csa = $false
             if (Yes "> Install WpfClient?") {
                 $part = "p=WpfClient"
+                Write-Host "WpfClient can be installed as a 'manual' client, next to a regular client, targeting a separate Heads Retail environment (for example a test environment)" -ForegroundColor Yellow
                 if (Yes "--> Install as a manual client?") {
                     $label = Label
                     $installPath = [System.Uri]::EscapeDataString("C:\ProgramData\Heads\$label")
