@@ -559,16 +559,22 @@ function Get-WorkstationId
         }
     }
 }
-function Get-RemoteFolder
+function Get-RetailVersion
 {
-    $input = Read-Host "> Enter a path to a folder on the build output share (e.g. retail/23.1)"
+    $input = Read-Host "> Enter the name of a Retail version (e.g. 22.3 or 23.400)"
     switch ( $input.Trim().ToLower()) {
         "" {
-            Write-Host "Invalid folder format"
-            return Get-RemoteFolder
+            Write-Host "Invalid retail version format"
+            return Get-RetailVersion
         }
         "cancel" { return $null }
-        default { return $input }
+        default {
+            if ($input -notmatch "^\d{2}\.\d{1,3}$") {
+                Write-Host "Invalid retail version format"
+                return Get-RetailVersion
+            }
+            return $input
+        }
     }
 }
 function Get-WorkstationIds
@@ -1626,56 +1632,56 @@ $modifyCommands = @(
         }
     }
     @{
-        Command = "RemoteFolders"
-        Description = "Lists and assigns remote folders on the build output share, from where the BC can deploy client software versions"
-        Action = $remotefolders_c = {
-            $input = Read-Host "> Enter 'list' to list the remote folders, 'add' or 'remove' to edit the list or 'cancel' to cancel"
+        Command = "Versions"
+        Description = "Lists and assigns the Retail versions that are tracked on the build output share, from where the BC can deploy client software versions"
+        Action = $versions_c = {
+            $input = Read-Host "> Enter 'list' to list the tracked Retail versions, 'add' or 'remove' to edit the list or 'cancel' to cancel"
             switch ( $input.Trim().ToLower()) {
                 "cancel" { return }
                 "list" {
-                    [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                    if ($folders.Count -eq 0) {
-                        Write-Host "There are no assigned remote directories"
+                    [string[]]$tags = (irm "$bc/RemoteFile.Settings/_/select=RetailBuildTags" @getSettingsRaw).RetailBuildTags
+                    if ($tags.Count -eq 0) {
+                        Write-Host "There are no tracked Retail versions"
                     } else {
                         Write-Host
-                        $folders | Out-Host
+                        $tags | Out-Host
                         Write-Host
                     }
-                    & $remotefolders_c
+                    & $versions_c
                 }
                 "add" {
-                    $folder = Get-RemoteFolder
-                    [string[]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                    $folders += $folder
-                    $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
+                    $version = Get-RetailVersion
+                    [string[]]$versions = (irm "$bc/RemoteFile.Settings/_/select=RetailBuildTags" @getSettingsRaw).RetailBuildTags
+                    $versions += $version
+                    $body = @{ RetailBuildTags = $versions } | ConvertTo-Json
                     $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
                     if ($result.Status -eq "success") {
-                        Write-Host "$folder was added" -ForegroundColor Green
+                        Write-Host "$version was added" -ForegroundColor Green
                     } else {
-                        Write-Host "An error occured while adding $folder to the assigned remote folder list"
+                        Write-Host "An error occured while adding $version to the tracked Retail versions list"
                     }
-                    & $remotefolders_c
+                    & $versions_c
                 }
                 "remove" {
-                    $folder = Get-RemoteFolder
-                    [System.Collections.Generic.List[string]]$folders = (irm "$bc/RemoteFile.Settings/_/select=RemoteDirectories" @getSettingsRaw).RemoteDirectories
-                    $removed = $folders.Remove($folder)
+                    $version = Get-RetailVersion
+                    [System.Collections.Generic.List[string]]$versions = (irm "$bc/RemoteFile.Settings/_/select=RetailBuildTags" @getSettingsRaw).RetailBuildTags
+                    $removed = $versions.Remove($version)
                     if (!$removed) {
-                        Write-Host "$folder is not an assigned remote folder"
-                        & $remotefolders_c
+                        Write-Host "$version is not a tracked Retail version"
+                        & $versions_c
                     }
                     else {
-                        $body = @{ RemoteDirectories = $folders } | ConvertTo-Json
+                        $body = @{ RetailBuildTags = $versions } | ConvertTo-Json
                         $result = irm "$bc/RemoteFile.Settings" -Body $body @patchSettings
                         if ($result.Status -eq "success") {
-                            Write-Host "$folder was removed"  -ForegroundColor Green
+                            Write-Host "$version was removed"  -ForegroundColor Green
                         } else {
-                            Write-Host "An error occured while removing $folder from the assigned remote folder list"
+                            Write-Host "An error occured while removing $version from the tracked Retail versions list"
                         }
                     }
-                    & $remotefolders_c
+                    & $versions_c
                 }
-                default { & $remotefolders_c }
+                default { & $versions_c }
             }
         }
     }
