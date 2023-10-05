@@ -1784,39 +1784,28 @@ $modifyCommands = @(
         }
     }
     @{
-        Command = "UpdateDependencies"
-        Description = "Updates the Broadcaster dependencies to a new or existing version"
+        Command = "Dependencies"
+        Description = "Lists and updates the Broadcaster dependencies to a new or existing version"
         Action = {
-            $status = (irm "$bc/DependencyStatus/" @getSettingsRaw)[0]
+            $status = (irm "$bc/DependencyStatus" @getSettingsRaw)[0]
             $nextAvailable = (irm "$bc/DependencyUpdate" @getSettingsRaw)[0]
-            Write-Host "> This Broadcaster is running version " -NoNewline
-            Write-Host $version -ForegroundColor Yellow -NoNewline
-            Write-Host ". A new version " -NoNewline
-            Write-Host $nextAvailable.Version -ForegroundColor Magenta -NoNewline
-            Write-Host " is available!"
-            $response = Read-Host "> Enter 'update' to update and restart the Broadcaster right now or 'cancel' to cancel"
-            $response = $response.Trim().ToLower()
-            if ($response -ieq "update") {
-                $fullName = [System.Uri]::EscapeDataString($nextAvailable.FullName)
-                $body = @{ Install = $true } | ConvertTo-Json
-                $result = irm "$bc/BroadcasterUpdate/FullName=$fullName" -Body $body @patchSettings
-                Write-Host "> Updating Broadcaster to version " -NoNewline
-                Write-Host $nextAvailable.Version -ForegroundColor Green -NoNewline
-                Write-Host " " -NoNewline
-                while ($true) {
-                    Write-Host "." -NoNewline -ForegroundColor Gray
-                    $interval = Start-Sleep 2 &
-                    try {
-                        $currentVersion = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" -TimeoutSec 2 @getSettingsRaw -ErrorAction SilentlyContinue)[0].Version
-                        if ($currentVersion -eq $nextAvailable.Version) {
-                            Write-Host " Done!" -ForegroundColor Green -NoNewline
-                            Write-Host
-                            break
-                        }
+            $status | Out-Host
+            if ($nextAvailable.IsNewerThanCurrent) {
+                Write-Host "> A new dependency bundle is available!" -ForegroundColor Green
+                $response = Read-Host "> Enter 'update' to update the dependencies or 'cancel' to cancel"
+                $response = $response.Trim().ToLower()
+                if ($response -ieq "update") {
+                    $body = @{ Install = $true } | ConvertTo-Json
+                    $result = irm "$bc/DependencyUpdate" -Body $body @patchSettings
+                    if ($result.Status -eq "success") {
+                        Write-Host "> Dependencies updated successfully" -ForegroundColor Green
+                    } else {
+                        Write-Host "> An error occurred while updating dependencies" -ForegroundColor Red
+                        $result | Out-Host
                     }
-                    catch { }
-                    Receive-Job $interval -Wait
                 }
+            } else {
+                Write-Host "> Dependencies are up-to-date"
             }
         }
     }
