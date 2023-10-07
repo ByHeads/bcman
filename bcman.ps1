@@ -220,7 +220,13 @@ function Num
 function InvalidFileName
 {
     param([string]$name)
-    return $name.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ne -1
+    if ($name.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ne -1) {
+        return $true
+    }
+    if ( $name.Contains(".")) {
+        return $true
+    }
+    return $false
 }
 function Label
 {
