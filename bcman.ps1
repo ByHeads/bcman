@@ -174,7 +174,6 @@ $deleteSettings = @{
     Method = "DELETE"
     Credential = $credentials
 }
-
 #endregion 
 #region Lib
 function Get-Batch
@@ -873,17 +872,20 @@ $getStatusCommands = @(
                 $version = $results.Config[0].Version
                 $hostName = $results.Config[0].ComputerName
                 $nextVersion = $null
-                $nextVersion = $results.NextVersion | select -First 1 -Exp Version
-                $notifications = $results.Notifications
-                $filter = $results.ReplicationFilter
-
+                $nextVersion = $results.NextVersion | select -First 1 -Exp Version -ErrorAction SilentlyContinue
+                $notifications = $results.Notifications -as [System.Collections.IEnumerable]
+                $filter = $results.ReplicationFilter -as [System.Collections.IEnumerable]
                 Write-Host
-                Write-Host "`u{2022} Using URL: " -NoNewline
+                Write-Host "`u{2022} Connected with URL: " -NoNewline
                 Write-Host $bc
-                Write-Host "`u{2022} Connected to: " -NoNewLine
-                Write-Host $hostName -ForegroundColor Green
-                Write-Host "`u{2022} Broadcaster version: " -NoNewLine
-                Write-Host $version -ForegroundColor Green
+                if ($hostname) {
+                    Write-Host "`u{2022} Connected to: " -NoNewLine
+                    Write-Host $hostName -ForegroundColor Green
+                }
+                if ($version) {
+                    Write-Host "`u{2022} Broadcaster version: " -NoNewLine
+                    Write-Host $version -ForegroundColor Green
+                }
                 if ($nextVersion) {
                     Write-Host "`u{2022} A new version: "  -NoNewline
                     Write-Host $nextVersion -ForegroundColor Magenta -NoNewline
@@ -891,34 +893,38 @@ $getStatusCommands = @(
                     Write-Host "update" -ForegroundColor Yellow -NoNewline
                     Write-Host ")"
                 }
-                $notificationsCount = $notifications.Length
-                Write-Host "`u{2022} You have " -NoNewline
-                $color = "Green"
-                if ($notificationsCount -gt 0) { $color = "Yellow" }
-                $subject = " notification"
-                if ($notificationsCount -ne 1) { $subject = "$subject`s" }
-                Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
-                Write-Host $subject -NoNewline
-                if ($notificationsCount -gt 0) {
-                    Write-Host " (see " -NoNewline
-                    Write-Host "notifications" -ForegroundColor Yellow -NoNewline
-                    Write-Host ")"
+                if ($notifications) {
+                    $notificationsCount = $notifications.Length
+                    Write-Host "`u{2022} You have " -NoNewline
+                    $color = "Green"
+                    if ($notificationsCount -gt 0) { $color = "Yellow" }
+                    $subject = " notification"
+                    if ($notificationsCount -ne 1) { $subject = "$subject`s" }
+                    Write-Host $notificationsCount -ForegroundColor $color -NoNewLine
+                    Write-Host $subject -NoNewline
+                    if ($notificationsCount -gt 0) {
+                        Write-Host " (see " -NoNewline
+                        Write-Host "notifications" -ForegroundColor Yellow -NoNewline
+                        Write-Host ")"
+                    }
                 }
-                if ($filter.AllowAll) { }
-                elseif ($filter.AllowNone) {
-                    Write-Host "`u{2022} " -NoNewline
-                    Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
-                    Write-Host "(see " -NoNewline
-                    Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
-                    Write-Host ")"
-                }
-                else {
-                    Write-Host "`u{2022} " -NoNewline
-                    Write-Host "Replication is currently enabled " -NoNewline
-                    Write-Host "only for some" -ForegroundColor Yellow -NoNewline
-                    Write-Host " recipients (see " -NoNewline
-                    Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
-                    Write-Host ")"
+                if ($filter) {
+                    if ($filter.AllowAll) { }
+                    elseif ($filter.AllowNone) {
+                        Write-Host "`u{2022} " -NoNewline
+                        Write-Host "Replication disabled for all recipients " -ForegroundColor Red -NoNewline
+                        Write-Host "(see " -NoNewline
+                        Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                        Write-Host ")"
+                    }
+                    else {
+                        Write-Host "`u{2022} " -NoNewline
+                        Write-Host "Replication is currently enabled " -NoNewline
+                        Write-Host "only for some" -ForegroundColor Yellow -NoNewline
+                        Write-Host " recipients (see " -NoNewline
+                        Write-Host "replicationfilter" -ForegroundColor Yellow -NoNewline
+                        Write-Host ")"
+                    }
                 }
                 Write-Host
             }
@@ -930,6 +936,9 @@ $getStatusCommands = @(
     @{
         Command = "ReceiverStatus"
         Description = "Prints the status for all connected Receivers"
+        Resources = @{
+            "Broadcaster.Admin.Receiver" = "GET"
+        }
         Action = {
             $list = irm "$bc/Receiver/_/select=WorkstationId,LastActive" @getSettingsRaw
             if ($list.Count -eq 0) { Write-Host "Found no connected Receivers" }
@@ -939,6 +948,9 @@ $getStatusCommands = @(
     @{
         Command = "ReceiverLog"
         Description = "Prints the last recorded status for all connected and disconnected Receivers"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+        }
         Action = {
             $list = irm "$bc/ReceiverLog/_/select=WorkstationId,LastActive,IsConnected" @getSettingsRaw
             if ($list.Count -eq 0) { Write-Host "Found no connected or disconnected Receivers" }
@@ -948,6 +960,9 @@ $getStatusCommands = @(
     @{
         Command = "Config"
         Description = "Prints the configuration of the Broadcaster"
+        Resources = @{
+            "Broadcaster.Admin.Config" = "GET"
+        }
         Action = {
             irm "$bc/Config" @getSettingsRaw | Out-Host
         }
@@ -955,6 +970,9 @@ $getStatusCommands = @(
     @{
         Command = "DeploymentInfo"
         Description = "Prints details about deployed software versions on the Broadcaster"
+        Resources = @{
+            "Broadcaster.Deployment.File" = "GET"
+        }
         Action = {
             $list = irm "$bc/File/_/select=ProductName,Version&distinct=true" @getSettingsRaw
             if ($list.Count -eq 0) { Write-Host "Found no deployed software versions" }
@@ -964,6 +982,9 @@ $getStatusCommands = @(
     @{
         Command = "VersionInfo"
         Description = "Prints details about a the installed software on Receivers"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+        }
         Action = $versioninfo_c = {
             $softwareProduct = Get-SoftwareProduct
             if (!$softwareProduct) {
@@ -990,6 +1011,9 @@ $getStatusCommands = @(
     @{
         Command = "ManualClientInfo"
         Description = "Prints details about the installed manual WPF clients on Receivers"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+        }
         Action = $manualclientinfo_c = {
             $response = irm "$bc/ReceiverLog/Modules.WpfClient.ExternalClients.Count>0" @getSettingsRaw
             if ($response.Count -eq 0) {
@@ -1012,6 +1036,9 @@ $getStatusCommands = @(
     @{
         Command = "ReplicationInfo"
         Description = "Prints details about the replication status of Receivers"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+        }
         Action = {
             $response = irm "$bc/ReceiverLog/modules.replication.isactive=true" @getSettingsRaw
             if ($response.Count -eq 0) {
@@ -1031,6 +1058,9 @@ $getStatusCommands = @(
     @{
         Command = "ReceiverDetails"
         Description = "Prints the last known details about a specific Receiver (connected or disconnected)"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+        }
         Action = $receiverDetails_c = {
             $workstationId = Get-WorkstationId
             if (!$workstationId) {
@@ -1073,6 +1103,9 @@ $getStatusCommands = @(
     @{
         Command = "Notifications"
         Description = "Prints details about current Broadcaster notifications"
+        Resources = @{
+            "Broadcaster.Admin.NotificationLog" = "GET", "DELETE"
+        }
         Action = $notifications_c = {
             $response = irm "$bc/NotificationLog" @getSettings
             if ($response.DataCount -eq 0) {
@@ -1114,6 +1147,9 @@ $getStatusCommands = @(
     @{
         Command = "CheckRetailConnection"
         Description = "Prints details about the Heads Retail Connection"
+        Resources = @{
+            "Broadcaster.Replication.CheckRetailConnection" = "GET"
+        }
         Action = {
             $response = irm "$bc/CheckRetailConnection" @getSettingsRaw
             $status = $response[0].Status
@@ -1143,6 +1179,11 @@ $dashboardCommands = @(
     @{
         Command = "SoftwareDashboard"
         Description = "Presents a live dashboard of the software status of clients"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "GET"
+            "Broadcaster.Deployment.LaunchSchedule" = "GET"
+            "Broadcaster.Deployment.File" = "GET"
+        }
         Action = {
             Write-Host "This command is under development..."
             $softwareProduct = Get-SoftwareProduct
@@ -1183,6 +1224,9 @@ $remoteDeploymentCommands = @(
     @{
         Command = "ISM"
         Description = "Starts Install Script Maker"
+        Resources = @{
+            "Broadcaster.Admin.InstallToken" = "GET"
+        }
         Action = {
             Write-Host
             Write-Host "This tool will help create a Broadcaster install script!" -ForegroundColor Green
@@ -1253,6 +1297,9 @@ $remoteDeploymentCommands = @(
     @{
         Command = "Install"
         Description = "Install or reinstall software on client computers through the Receiver"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.RemoteInstall" = "POST"
+        }
         Action = $install_c = {
             [string[]]$workstationIds = Get-WorkstationIds "for the clients to install software for"
             if (!$workstationIds) {
@@ -1356,6 +1403,9 @@ $remoteDeploymentCommands = @(
     @{
         Command = "Uninstall"
         Description = "Uninstall software on client computers through the Receiver"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.RemoteUninstall" = "POST"
+        }
         Action = $uninstall_c = {
             [string[]]$workstationIds = Get-WorkstationIds "for the clients to uninstall software for"
             if (!$workstationIds) {
@@ -1411,6 +1461,9 @@ $remoteDeploymentCommands = @(
     @{
         Command = "Reset"
         Description = "Resets one or more POS server databases, optionally also closing their day journals"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.Reset" = "POST"
+        }
         Action = {
             [string[]]$workstationIds = Get-WorkstationIds
             Write-Host "> Selected these workstations for reset:"
@@ -1448,6 +1501,9 @@ $remoteDeploymentCommands = @(
     @{
         Command = "Control"
         Description = "Start or stop services and applications on client computers"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.RemoteControl" = "POST"
+        }
         Action = $control_c = {
             Write-Host
             Write-Host "This command can do the following:"
@@ -1514,6 +1570,9 @@ $remoteDeploymentCommands = @(
     }
     @{
         Command = "InstallToken"
+        Resources = @{
+            "Broadcaster.Admin.InstallToken" = "GET"
+        }
         Description = "Generates a new install token with a 7 day expiration"
         Action = {
             $token = irm "$bc/InstallToken" @getSettingsRaw
@@ -1532,6 +1591,9 @@ $modifyCommands = @(
     @{
         Command = "Forget"
         Description = "Removes the Receiver log entry for a given workstation"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverLog" = "DELETE"
+        }
         Action = $forget_c = {
             $workstationId = Get-WorkstationId "for the client that should be forgotten"
             if (!$workstationId) {
@@ -1551,6 +1613,9 @@ $modifyCommands = @(
     @{
         Command = "Deploy"
         Description = "Lists and downloads deployable software versions to the Broadcaster"
+        Resources = @{
+            "RemoteFile.Deployment.RemoteFile" = "GET", "PATCH"
+        }
         Action = $deploy_c = {
             $softwareProduct = Get-SoftwareProduct
             if (!$softwareProduct) {
@@ -1585,6 +1650,9 @@ $modifyCommands = @(
     @{
         Command = "Launch"
         Description = "Lists launchable software versions and schedules launches"
+        Resources = @{
+            "Broadcaster.Deployment.LaunchSchedule" = "GET", "POST"
+        }
         Action = $launch_c = {
             $message = "> Enter 'list' to list and edit scheduled launches, 'schedule' to schedule a new launch or 'cancel' to cancel"
             $input = Read-Host $message
@@ -1640,6 +1708,9 @@ $modifyCommands = @(
     @{
         Command = "Versions"
         Description = "Lists and assigns the Retail versions that are tracked on the build output share, from where the BC can deploy client software versions"
+        Resources = @{
+            "Broadcaster.RemoteFile.Settings" = "GET", "PATCH"
+        }
         Action = $versions_c = {
             $input = Read-Host "> Enter 'list' to list the tracked Retail versions, 'add' or 'remove' to edit the list or 'cancel' to cancel"
             switch ( $input.Trim().ToLower()) {
@@ -1694,6 +1765,9 @@ $modifyCommands = @(
     @{
         Command = "ReplicationFilter"
         Description = "View and edit the Replication filter, defining the enabled replication recipients"
+        Resources = @{
+            "Broadcaster.Replication.ReplicationFilter" = "GET", "PATCH"
+        }
         Action = $replicationfilter_c = {
             $filter = irm "$bc/ReplicationFilter" @getSettingsRaw
             if ($filter.AllowAll) {
@@ -1737,6 +1811,9 @@ $modifyCommands = @(
     @{
         Command = "Groups"
         Description = "Lists and assigns workstation group members"
+        Resources = @{
+            "Broadcaster.Replication.WorkstationGroups" = "GET", "PATCH"
+        }
         Action = $groups_c = {
             $group = Get-WorkstationGroup
             if (!$group) {
@@ -1749,6 +1826,10 @@ $modifyCommands = @(
     @{
         Command = "Update"
         Description = "Updates the Broadcaster to a new version"
+        Resources = @{
+            "Broadcaster.Admin.Config" = "GET"
+            "Broadcaster.Admin.BroadcasterUpdate" = "GET", "PATCH"
+        }
         Action = {
             $version = (irm "$bc/Config/_/select=Version&rename=General.CurrentVersion->Version" @getSettingsRaw)[0].Version
             $nextAvailable = (irm "$bc/BroadcasterUpdate/_/order_desc=Version&limit=1" @getSettingsRaw)[0]
@@ -1792,6 +1873,10 @@ $modifyCommands = @(
     @{
         Command = "Dependencies"
         Description = "Lists and updates the Broadcaster dependencies to a new or existing version"
+        Resources = @{
+            "Broadcaster.Admin.DependencyStatus" = "GET"
+            "Broadcaster.Admin.DependencyUpdate" = "GET", "PATCH"
+        }
         Action = {
             $status = (irm "$bc/DependencyStatus" @getSettingsRaw)[0]
             $nextAvailable = (irm "$bc/DependencyUpdate" @getSettingsRaw)[0]
@@ -1822,21 +1907,32 @@ $launchTerminalsCommands = @(
     @{
         Command = "LaunchCommands"
         Description = "Enters the Broadcaster LaunchCommands terminal"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.LaunchCommands" = "GET"
+        }
         Action = { Enter-Terminal "LaunchCommands" }
     }
     @{
         Command = "AccessToken"
         Description = "Enters the Broadcaster access token terminal"
+        Resources = @{
+            "Broadcaster.Auth.AccessToken" = "GET"
+        }
         Action = { Enter-Terminal "AccessToken.Commands" }
     }
     @{
         Command = "Shell"
         Description = "Enters the Broadcaster shell terminal"
+        Hide = $true
+        Resources = @{
+            "RESTable.Shell" = "GET"
+        }
         Action = { Enter-Terminal "Shell" }
     }
     @{
         Command = "Terminal"
         Description = "Enters a Broadcaster terminal"
+        Hide = $true
         Action = { Enter-Terminal (Get-Terminal) }
     }
 )
@@ -1953,41 +2049,71 @@ $otherCommands = @(
         }
     }
 )
-function Write-Commands
+
+$availabeResourcesMap = @{ }
+$availableResourcesJob = irm "$bc/AvailableResource" -Cr $credentials -He @{ Accept = "application/json;raw=true" } &
+
+function Has-Access
 {
-    param($commands)
-    $list = @()
-    foreach ($c in $commands | Sort-Object -Property Command) {
-        $list += [pscustomobject]@{
-            Command = $c.Command + "    "
-            Description = $c.Description
+    param($command)
+    if ($command.Resources) {
+        if ($availableResourcesJob -ne "completed") {
+            $list = Receive-Job $availableResourcesJob -Wait
+            foreach ($r in $list) {
+                $availabeResourcesMap[$r.Name] = $r.Methods
+            }
+        }
+        foreach ($resource in $command.Resources.Keys) {
+            $granted = $availabeResourcesMap[$resource]
+            foreach ($required in $command.Resources[$resource]) {
+                if ($granted -notcontains $required) {
+                    return $false;
+                }
+            }
         }
     }
+    return $true
+}
+
+function Write-Commands
+{
+    param($label, $commands)
+    $list = @()
+    foreach ($c in $commands | Sort-Object -Property Command) {
+        if ($c.Hide) {
+            continue;
+        }
+        if (Has-Access $c) {
+            $list += [pscustomobject]@{
+                Command = $c.Command + "    "
+                Description = $c.Description
+            }
+        }
+    }
+    if ($list.Count -eq 0) {
+        return
+    }
+    Write-Host "$label`:" -ForegroundColor Yellow
     $list | Format-Table | Out-Host
 }
+
 
 function WriteAll-Commands
 {
     Write-Host
-    Write-Host "STATUS:" -ForegroundColor Yellow
-    Write-Commands $getStatusCommands
-    Write-Host "MODIFY:" -ForegroundColor Yellow
-    Write-Commands $modifyCommands
-    Write-Host "DASHBOARDS:" -ForegroundColor Yellow
-    Write-Commands $dashboardCommands
-    Write-Host "REMOTE DEPLOYMENT:" -ForegroundColor Yellow
-    Write-Commands $remoteDeploymentCommands
-    Write-Host "TERMINALS:" -ForegroundColor Yellow
-    Write-Commands $launchTerminalsCommands
-    Write-Host "OTHER:" -ForegroundColor Yellow
-    Write-Commands $otherCommands
+    Write-Commands "STATUS" $getStatusCommands
+    Write-Commands "MODIFY" $modifyCommands
+    Write-Commands "DASHBOARDS" $dashboardCommands
+    Write-Commands "REMOTE DEPLOYMENT" $remoteDeploymentCommands
+    Write-Commands "TERMINALS" $launchTerminalsCommands
+    Write-Commands "OTHER" $otherCommands
 }
 
 function Write-HelpInfo
 {
     Write-Host "> Use " -NoNewline
     Write-Host "help" -NoNewLine -ForegroundColor Yellow
-    Write-Host " to list all commands"
+    Write-Host " to list available commands"
 }
 
 $allCommands = $getStatusCommands + $modifyCommands + $remoteDeploymentCommands + $dashboardCommands + $launchTerminalsCommands + $otherCommands
@@ -1998,7 +2124,11 @@ function Call($command)
     foreach ($c in $allCommands) {
         if ($c.Command -ieq $command) {
             $foundCommand = $true
-            & $c.Action
+            if (Has-Access $foundCommand) {
+                & $c.Action
+            } else {
+                Write-Host "> You don't have permission to use command $resource" -ForegroundColor Red
+            }
             return
         }
     }
@@ -2010,6 +2140,7 @@ function Call($command)
 }
 
 #endregion
+
 #region Read-eval loop
 
 Call "Status"
