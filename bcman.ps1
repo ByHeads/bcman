@@ -1387,7 +1387,7 @@ $remoteDeploymentCommands = @(
                 return
             }
             Write-Host "Running remote install (this could take a while)" -ForegroundColor Yellow
-            $result = irm "$bc/RemoteInstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
+            $result = irm "$bc/RemoteInstall" @postSettings -Body $body -TimeoutSec 3600 -ErrorAction SilentlyContinue
             try {
                 Write-RemoteResult $result
                 Write-Host
@@ -1445,7 +1445,7 @@ $remoteDeploymentCommands = @(
                 return
             }
             Write-Host "Running remote uninstall (this could take a while)" -ForegroundColor Yellow
-            $result = irm "$bc/RemoteUninstall" @postSettings -Body $body -TimeoutSec 600 -ErrorAction SilentlyContinue
+            $result = irm "$bc/RemoteUninstall" @postSettings -Body $body -TimeoutSec 3600 -ErrorAction SilentlyContinue
             try {
                 Write-RemoteResult $result
                 Write-Host
@@ -1487,7 +1487,7 @@ $remoteDeploymentCommands = @(
             }
             Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
             $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
-            $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 600 -ErrorAction SilentlyContinue
+            $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 3600 -ErrorAction SilentlyContinue
             try {
                 Write-RemoteResult $result
                 Write-Host
@@ -1557,7 +1557,7 @@ $remoteDeploymentCommands = @(
                 return
             }
             Write-Host "Running $command (this could take a while)" -ForegroundColor Yellow
-            $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 600
+            $result = irm "$bc/RemoteControl" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 3600
             try {
                 Write-RemoteResult $result
                 Write-Host
