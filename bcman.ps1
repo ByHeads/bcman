@@ -63,7 +63,6 @@ function Get-BroadcasterUrl
     return Get-BroadcasterUrl $instr
 }
 
-$allowUnencryptedAuthentication = $false
 function Get-BroadcasterUrl-Ism
 {
     $input = Read-Host "> Enter the URL or hostname of the Broadcaster (or 'enter' to use this Broadcaster)"
@@ -90,7 +89,6 @@ function Get-BroadcasterUrl-Ism
     if ( $input.StartsWith("http://")) {
         Write-Host "> You are using an unencrypted Broadcaster connection. Use Ctrl+C to abort..." -ForegroundColor Yellow
         $PSDefaultParameterValues['Invoke-RestMethod:AllowUnencryptedAuthentication'] = $true
-        $allowUnencryptedAuthentication = $true
     }
     try {
         $options = irm $input -Method "OPTIONS" -TimeoutSec 5
