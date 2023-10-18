@@ -1855,7 +1855,7 @@ $modifyCommands = @(
         Command = "Deploy"
         Description = "Lists and downloads deployable software versions to the Broadcaster"
         Resources = @{
-            "RemoteFile.Deployment.RemoteFile" = "GET", "PATCH"
+            "Broadcaster.Deployment.RemoteFile" = "GET", "PATCH"
         }
         Action = $deploy_c = {
             $softwareProduct = Get-SoftwareProduct
@@ -1950,7 +1950,7 @@ $modifyCommands = @(
         Command = "Versions"
         Description = "Lists and assigns the Retail versions that are tracked on the build output share, from where the BC can deploy client software versions"
         Resources = @{
-            "Broadcaster.RemoteFile.Settings" = "GET", "PATCH"
+            "Broadcaster.Deployment.RemoteFile" = "GET", "PATCH"
         }
         Action = $versions_c = {
             $input = Read-Host "> Enter 'list' to list the tracked Retail versions, 'add' or 'remove' to edit the list or 'cancel' to cancel"
