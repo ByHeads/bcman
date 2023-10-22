@@ -1223,6 +1223,7 @@ $dashboardCommands = @(
 
             $upToDate = "`e[32mUp to date`e[0m"
             $updating = "`e[35mUpdating`e[0m"
+            $restarting = "`e[36mRestarting`e[0m"
             $offline = "`e[31mOffline`e[0m"
             $waitingToDownload = "`e[33mWaiting to download`e[0m"
             $downloading = "`e[36mDownloading`e[0m"
@@ -1235,7 +1236,8 @@ $dashboardCommands = @(
                     $waitingToDownload { return 1 }
                     $downloading { return 2 }
                     $updating { return 3 }
-                    $upToDate { return 4 }
+                    $restarting { return 4 }
+                    $upToDate { return 5 }
                 }
                 return $value
             }
@@ -1269,9 +1271,18 @@ $dashboardCommands = @(
                     $status = ""
                     $downloadPercent = $null
                     if ($_.Modules."$softwareProduct".CurrentVersion -eq $currentVersion) {
+                        if ($softwareProduct -eq "PosServer") {
+                            if ($_.Modules.PosServer.IsRunning) {
+                                $status = $upToDate
+                            }
+                            else {
+                                $status = $restarting
+                            }
+                        }
                         $status = $upToDate
                     }
-                    elseif ($_.Modules."$softwareProduct".DeployedVersions | ? { $_ -eq $currentVersion } ) {
+                    elseif ($currentVersion -in $_.Modules."$softwareProduct".DeployedVersions) {
+                        $downloadPercent = 100
                         $status = $updating
                     }
                     elseif (!$_.IsConnected) {
@@ -1321,6 +1332,12 @@ $dashboardCommands = @(
                         $version = "`e[31m$version`e[0m"
                     }
                     S $target Version $version
+                    if ($downloadPercent -eq 100) {
+                        $downloadPercent = "`e[92m$downloadPercent`e[0m"
+                    }
+                    elseif ($downloadPercent) {
+                        $downloadPercent = "`e[33m$downloadPercent`e[0m"
+                    }
                     S $target "Download %" $downloadPercent
                     return [pscustomobject]$target
                 }
