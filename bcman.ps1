@@ -275,7 +275,7 @@ function Write-RemoteResult
 }
 function Write-DashboardHeader
 {
-    param($name, $context)
+    param($name, $context, $filterActive)
     Write-Host "$name" -ForegroundColor Yellow -NoNewline
     if ($context) {
         Write-Host " for " -NoNewline
@@ -287,7 +287,10 @@ function Write-DashboardHeader
     Write-Host " to refresh, " -NoNewline
     Write-Host "Ctrl+C" -ForegroundColor Yellow -NoNewline
     Write-Host " to quit, " -NoNewline
-    Write-Host "`e[1m`e[92mI`e[32mnitial`e[0m to sort (again to toggle direction)"
+    Write-Host "`e[1m`e[92mI`e[32mnitial`e[0m to sort (again to toggle), " -NoNewline
+    Write-Host "`e[1m`e[92mF`e[32m`e[0m toggles " -NoNewline
+    if ($filterActive) { Write-Host "`e[1m`e[93mPOS filter`e[0m" }
+    else { Write-Host "POS filter" }
 }
 function Get-DashboardInput
 {
@@ -1216,13 +1219,8 @@ $dashboardCommands = @(
             $runtime = "win7-x64" # Parameterize if necessary
             $sortMember = "Status"
             $descending = $true
-            $members = @{
-                Status = "`e[92mS`e[32mtatus"
-                WorkstationId = "Workstation`e[92m I`e[32mD"
-                LastActive = "`e[92mL`e[32mast active (UTC)"
-                Version = "`e[92mV`e[32mersion"
-                "Download %" = "`e[92mD`e[32mownload %"
-            }
+            $onlyPos = $false
+
             $upToDate = "`e[32mUp to date`e[0m"
             $updating = "`e[35mUpdating`e[0m"
             $offline = "`e[31mOffline`e[0m"
@@ -1243,6 +1241,17 @@ $dashboardCommands = @(
             }
 
             while ($true) {
+                $members = @{
+                    Status = "`e[92mS`e[32mtatus"
+                    Kind = "`e[92mK`e[32mind"
+                    WorkstationId = "Workstation`e[92m I`e[32mD"
+                    LastActive = "`e[92mL`e[32mast active (UTC)"
+                    Version = "`e[92mV`e[32mersion"
+                    "Download %" = "`e[92mD`e[32mownload %"
+                }
+                if ($onlyPos) {
+                    $members.Kind = "`e[93mK`e[33mind`e[32m"
+                }
                 if ($descending) {
                     $postfix = "`e[35m▼`e[32m"
                 } else {
@@ -1288,27 +1297,56 @@ $dashboardCommands = @(
                         if ($sortMember -eq $name) { $o."$displayName $postfix" = $value }
                         else { $o.$displayName = $value }
                     }
+                    $kind = ""
+                    if ($_.Modules.PosServer.IsInstalled -eq $true) {
+                        $kind = "POS"
+                    }
+                    elseif ($_.Modules.CustomerServiceApplication.IsInstalled -eq $true) {
+                        $kind = "CSA"
+                    }
+                    elseif ($_.Modules.WpfClient.IsInstalled -eq $true) {
+                        $kind = "BO"
+                    }
+                    else {
+                        $kind = "--"
+                    }
                     S $target Status $status
+                    S $target Kind $kind
                     S $target WorkstationId $_.WorkstationId
                     S $target LastActive $_.LastActive
-                    S $target Version $_.Modules."$softwareProduct".CurrentVersion
+                    $version = $_.Modules."$softwareProduct".CurrentVersion
+                    if ($status -eq $upToDate) {
+                        $version = "`e[32m$version`e[0m"
+                    } else {
+                        $version = "`e[31m$version`e[0m"
+                    }
+                    S $target Version $version
                     S $target "Download %" $downloadPercent
                     return [pscustomobject]$target
                 }
                 cls
-                Write-DashboardHeader "UpdateDashboard" $softwareProduct
-                $listData | % { Pad $_ } | Sort-Object @{ Expression = { Sort-Order $_."$( $members[$sortMember] ) $postfix" }; Ascending = !$descending } |`
+                Write-DashboardHeader "UpdateDashboard" $softwareProduct $onlyPos
+                $listData |  ? { !$onlyPos -or $_."$( $members["Kind"] )" -eq "POS" } | % { Pad $_ } | Sort-Object @{ Expression = { Sort-Order $_."$( $members[$sortMember] ) $postfix" }; Ascending = !$descending } |`
                 Format-Table | Out-Host
 
                 $prevSort = $sortMember
-                switch (Get-DashboardInput s w l d v) {
+                switch (Get-DashboardInput s w k f l d v) {
                     quit { return }
                     refresh {
                         $prevSort = $null
                         break
                     }
+                    f {
+                        $onlyPos = !$onlyPos
+                        $prevSort = $null
+                        break;
+                    }
                     s {
                         $sortMember = "Status"
+                        break
+                    }
+                    k {
+                        $sortMember = "Kind"
                         break
                     }
                     w {
@@ -1349,18 +1387,22 @@ $dashboardCommands = @(
             $runtime = "win7-x64" # Parameterize if necessary
             $sortMember = "Status"
             $descending = $true
-
-            $members = @{
-                Status = "`e[92mS`e[32mtatus"
-                WorkstationId = "Workstation`e[92m I`e[32mD"
-                LastActive = "`e[92mL`e[32mast active (UTC)"
-                Receiver = "`e[92mR`e[32meceiver"
-                WpfClient = "`e[92mW`e[32mPF Client"
-                PosServer = "`e[92mP`e[32mOS Server"
-                CustomerServiceApplication = "`e[92mC`e[32mustomer Service Application"
-            }
-
+            $onlyPos = $false
             while ($true) {
+
+                $members = @{
+                    Status = "`e[92mS`e[32mtatus"
+                    Kind = "`e[92mK`e[32mind"
+                    WorkstationId = "Workstation`e[92m I`e[32mD"
+                    LastActive = "`e[92mL`e[32mast active (UTC)"
+                    Receiver = "`e[92mR`e[32meceiver"
+                    WpfClient = "`e[92mW`e[32mPF Client"
+                    PosServer = "`e[92mP`e[32mOS Server"
+                    CustomerServiceApplication = "`e[92mC`e[32mustomer Service Application"
+                }
+                if ($onlyPos) {
+                    $members.Kind = "`e[93mK`e[33mind`e[32m"
+                }
                 if ($descending) {
                     $postfix = "`e[35m▼`e[32m"
                 } else {
@@ -1384,19 +1426,38 @@ $dashboardCommands = @(
                         param($name, $version)
                         if (!$version) { return "" }
                         $post = ""
+                        $fixedLength = 20
                         if ($_.IsConnected) {
-                            if ($_.Modules.$name.IsRunning) { $post = " `u{2714}" }
-                            else { $post = " `u{2718}" }
-                        } else { $post = " `u{003F}" }
+                            if ($_.Modules.$name.IsRunning) { $post = " `u{2713}" }
+                            else { $post = " `u{2717}" }
+                        } else { $post = " `u{2300}" }
+                        $versionPart = $version
+                        if (($version.Length % 2) -ne 0) {
+                            $versionPart = "$versionPart "
+                        }
+                        $versionPart = $versionPart.PadRight($versionPart.Length + 1)
                         if ($currentVersions.$name.Version -eq $version) {
-                            return "`e[32m$version$post`e[0m"
+                            return "`e[32m$versionPart$post`e[0m"
                         }
                         else {
-                            return "`e[31m$version$post`e[0m"
+                            return "`e[31m$versionPart$post`e[0m"
                         }
                     }
-
+                    $kind = ""
+                    if ($_.Modules.PosServer.IsInstalled -eq $true) {
+                        $kind = "POS"
+                    }
+                    elseif ($_.Modules.CustomerServiceApplication.IsInstalled -eq $true) {
+                        $kind = "CSA"
+                    }
+                    elseif ($_.Modules.WpfClient.IsInstalled -eq $true) {
+                        $kind = "BO"
+                    }
+                    else {
+                        $kind = "--"
+                    }
                     S $target Status $status
+                    S $target Kind $kind
                     S $target WorkstationId $_.WorkstationId
                     S $target LastActive $_.LastActive
                     $receiver = HL Receiver $_.Modules.Receiver.CurrentVersion
@@ -1412,19 +1473,28 @@ $dashboardCommands = @(
                     return [pscustomobject]$target
                 }
                 cls
-                Write-DashboardHeader "SoftwareDashboard"
-                $listData | % { Pad $_ } | Sort-Object @{ Expression = { $_."$( $members[$sortMember] ) $postfix" }; Ascending = !$descending } | `
+                Write-DashboardHeader "SoftwareDashboard" "" $onlyPos
+                $listData | ? { !$onlyPos -or $_."$( $members["Kind"] )" -eq "POS" } | % { Pad $_ } | Sort-Object @{ Expression = { $_."$( $members[$sortMember] ) $postfix" }; Ascending = !$descending } | `
                 Format-Table | Out-Host
 
                 $prevSort = $sortMember
-                switch (Get-DashboardInput s i l r w p c) {
+                switch (Get-DashboardInput s i l f k r w p c) {
                     quit { return }
                     refresh {
                         $prevSort = $null
                         break
                     }
+                    f {
+                        $onlyPos = !$onlyPos
+                        $prevSort = $null
+                        break;
+                    }
                     s {
                         $sortMember = "Status"
+                        break
+                    }
+                    k {
+                        $sortMember = "Kind"
                         break
                     }
                     i {
