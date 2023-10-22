@@ -35,5 +35,9 @@ if ($PSVersionTable.PSVersion.Major -lt $requiredPsVersion) {
         $env:path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     }
 }
-# Launch the Broadcaster Manager with pwsh
-pwsh { irm raw.githubusercontent.com/byheads/bcman/main/bcman.ps1 | iex }
+# if in windows
+if ($IsWindows -eq $null) {
+    Start-Process pwsh -ArgumentList "-c `"irm raw.githubusercontent.com/byheads/bcman/main/bcman.ps1 | iex`""
+} else {
+    pwsh { irm raw.githubusercontent.com/byheads/bcman/main/bcman.ps1 | iex }
+}
