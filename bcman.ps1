@@ -287,10 +287,14 @@ function Write-DashboardHeader
     Write-Host " to refresh, " -NoNewline
     Write-Host "Ctrl+C" -ForegroundColor Yellow -NoNewline
     Write-Host " to quit, " -NoNewline
-    Write-Host "`e[1m`e[92mI`e[32mnitial`e[0m to sort (again to toggle), " -NoNewline
-    Write-Host "`e[1m`e[92mF`e[32m`e[0m toggles " -NoNewline
-    if ($filterActive) { Write-Host "`e[1m`e[93mPOS filter`e[0m" }
-    else { Write-Host "POS filter" }
+    Write-Host "`e[1m`e[92mI`e[32mnitial`e[0m to sort (again to toggle)" -NoNewline
+    if ($filterActive -ne $null) {
+        Write-Host ", `e[1m`e[92mF`e[32m`e[0m toggles " -NoNewline
+        if ($filterActive) { Write-Host "`e[1m`e[93mPOS filter`e[0m" }
+        else { Write-Host "POS filter" }
+    } else {
+        Write-Host
+    }
 }
 function Get-DashboardInput
 {
@@ -1223,10 +1227,10 @@ $dashboardCommands = @(
 
             $upToDate = "`e[32mUp to date`e[0m"
             $updating = "`e[35mUpdating`e[0m"
-            $restarting = "`e[36mRestarting`e[0m"
+            $restarting = "`e[96mRestarting`e[0m"
             $offline = "`e[31mOffline`e[0m"
-            $waitingToDownload = "`e[33mWaiting to download`e[0m"
-            $downloading = "`e[36mDownloading`e[0m"
+            $waitingToDownload = "`e[93mWaiting to download`e[0m"
+            $downloading = "`e[96mDownloading`e[0m"
 
             function Sort-Order()
             {
@@ -1545,6 +1549,176 @@ $dashboardCommands = @(
             }
         }
     }
+    @{
+        Command = "ReplicationDashboard"
+        Description = "Presents a live dashboard of the replication status of clients"
+        Resources = @{
+            "Broadcaster.Admin.ReplicationState" = "GET"
+            "Broadcaster.Deployment.LaunchSchedule" = "GET"
+        }
+        Action = {
+            $body = @{
+                ReplicationState = "GET /ReplicationState"
+                CurrentVersions = "GET /LaunchSchedule.CurrentVersions"
+            } | ConvertTo-Json
+            $url = "$bc/ReplicationState"
+            $sortMember = "Status"
+            $descending = $true
+
+            $upToDate = "`e[32mUp to date`e[0m"
+            $replicating = "`e[92mReplicating`e[0m"
+            $awaitUpdate = "`e[93mAwait update`e[0m"
+            $awaitInit = "`e[96mAwait init`e[0m"
+            $blocked = "`e[35mBlocked`e[0m"
+            $obsolete = "`e[31mObsolete`e[0m"
+
+            function Sort-Order()
+            {
+                param($value)
+                switch ($value) {
+                    $obsolete { return 0 }
+                    $blocked { return 1 }
+                    $awaitInit { return 2 }
+                    $awaitUpdate { return 3 }
+                    $replicating { return 4 }
+                    $upToDate { return 5 }
+                }
+                return $value
+            }
+
+            while ($true) {
+                $members = @{
+                    Status = "`e[92mS`e[32mtatus"
+                    Connection = "`e[92mC`e[32monnection"
+                    "Filter" = "`e[92mF`e[32milter"
+                    WorkstationId = "Workstation`e[92m I`e[32mD"
+                    LastReceived = "`e[92mL`e[32mast received (UTC)"
+                    LastActive = "Last ac`e[92mt`e[32mive (UTC)"
+                    PosServerVersion = "`e[92mP`e[32mOS Server version"
+                    ReplicationVersion = "`e[92mR`e[32meplication version"
+                    Applicable = "`e[92mA`e[32mpplicable"
+                    NonApplicable = "`e[92mN`e[32mon-applicable"
+                }
+                if ($descending) {
+                    $postfix = "`e[35m▼`e[32m"
+                } else {
+                    $postfix = "`e[35m▲`e[32m"
+                }
+                $data = Get-Batch $body
+                $currentPosVersion = $data.CurrentVersions[0].PosServer.Version
+                $listData = $data.ReplicationState | % {
+                    $status = ""
+                    if ($_.AwaitsInitialization -eq $false -and $_.IsInSequence -eq $false) {
+                        $status = $obsolete
+                    }
+                    elseif ($_.AwaitsInitialization -eq $true) {
+                        $status = $awaitInit
+                    }
+                    elseif ($_.IsBlocked -eq $true) {
+                        $status = $blockedt
+                    }
+                    elseif($_.RequiresPosServerUpdate) {
+                        $status = $awaitUpdate
+                    }
+                    elseif($_.ApplicableCount -eq 0) {
+                        $status = $upToDate
+                    }
+                    else {
+                        $status = $replicating
+                    }
+                    $target = [ordered]@{ }
+                    function S()
+                    {
+                        param($o, $name, $value)
+                        $displayName = $members[$name]
+                        if ($sortMember -eq $name) { $o."$displayName $postfix" = $value }
+                        else { $o.$displayName = $value }
+                    }
+                    S $target Status $status
+                    $connection = ""
+                    if ($_.IsConnected) { $connection = "`e[32mOnline`e[0m" }
+                    else { $connection = "`e[31mOffline`e[0m" }
+                    S $target Connection $connection
+                    $filter = ""
+                    if ($_.IncludedInFilter) { $filter = "`e[32m`u{2713}`e[0m" }
+                    else { $filter = "`e[31m`u{2717}`e[0m" }
+                    S $target "Filter" $filter
+                    S $target WorkstationId $_.WorkstationId
+                    S $target LastReceived $_.LastReceived
+                    S $target LastActive $_.LastActive
+                    $posServerVersion = $_.PosServerVersion
+                    if ($posServerVersion -eq $currentPosVersion) {
+                        $posServerVersion = "`e[32m$posServerVersion`e[0m"
+                    }
+                    else {
+                        $posServerVersion = "`e[93m$posServerVersion`e[0m"
+                    }
+                    S $target PosServerVersion $posServerVersion
+                    S $target ReplicationVersion $_.ReplicationVersion
+                    S $target Applicable $_.ApplicableCount
+                    S $target NonApplicable $_.NonApplicableCount
+                    return [pscustomobject]$target
+                }
+                cls
+                Write-DashboardHeader "ReplicationDashboard" $softwareProduct
+                $listData | % { Pad $_ } | Sort-Object @{ Expression = { Sort-Order $_."$( $members[$sortMember] ) $postfix" }; Ascending = !$descending } |`
+                Format-Table | Out-Host
+
+                $prevSort = $sortMember
+                switch (Get-DashboardInput s c f w l t p r a n) {
+                    quit { return }
+                    refresh {
+                        $prevSort = $null
+                        break
+                    }
+                    s {
+                        $sortMember = "Status"
+                        break
+                    }
+                    c {
+                        $sortMember = "Connection"
+                        break
+                    }
+                    f {
+                        $sortMember = "Filter"
+                        break
+                    }
+                    i {
+                        $sortMember = "WorkstationId"
+                        break
+                    }
+                    l {
+                        $sortMember = "LastReceived"
+                        break
+                    }
+                    t {
+                        $sortMember = "LastActive"
+                        break
+                    }
+                    p {
+                        $sortMember = "PosServerVersion"
+                        break
+                    }
+                    r {
+                        $sortMember = "ReplicationVersion"
+                        break
+                    }
+                    a {
+                        $sortMember = "Applicable"
+                        break
+                    }
+                    n {
+                        $sortMember = "NonApplicable"
+                        break
+                    }
+                }
+                if ($prevSort -eq $sortMember) {
+                    $descending = !$descending
+                }
+            }
+        }
+    }
+
 )
 #endregion
 #region Remote deployment
