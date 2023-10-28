@@ -1449,19 +1449,22 @@ $dashboardCommands = @(
                         $post = ""
                         $fixedLength = 20
                         if ($_.IsConnected) {
-                            if ($_.Modules.$name.IsRunning) { $post = " `u{2713}" }
-                            else { $post = " `u{2717}" }
-                        } else { $post = " `u{2300}" }
+                            if ($_.Modules.$name.IsRunning) { $post = " `e[1m`e[92m`u{2713}`e[0m" }
+                            else { $post = " `e[1m`e[91m`u{2717}`e[0m" }
+                        } else { $post = " `e[1m`e[37m`u{2300}`e[0m" }
                         $versionPart = $version
                         if (($version.Length % 2) -ne 0) {
                             $versionPart = "$versionPart "
                         }
                         $versionPart = $versionPart.PadRight($versionPart.Length + 1)
                         if ($currentVersions.$name.Version -eq $version) {
-                            return "`e[32m$versionPart$post`e[0m"
+                            return "`e[32m$versionPart`e[0m$post"
+                        }
+                        elseif ($currentVersions.$name.Version -lt $version) {
+                            return "`e[35m$versionPart`e[0m$post"
                         }
                         else {
-                            return "`e[31m$versionPart$post`e[0m"
+                            return "`e[31m$versionPart`e[0m$post"
                         }
                     }
                     $kind = ""
@@ -2082,14 +2085,14 @@ $remoteDeploymentCommands = @(
                 return
             }
             $version = Get-LaunchableSoftwareProductVersion $softwareProduct
-            [string[]]$workstationIds = Get-WorkstationIds "for the clients to launch $softwareProduct $version on"
+            [string[]]$workstationIds = Get-WorkstationIds
             if (!$workstationIds) {
                 return
             }
             $data = @{
                 Workstations = $workstationIds
                 Product = $softwareProduct
-                Version = $version
+                Version = $version.ToString()
             }
             $body = $data | ConvertTo-Json
             Write-Host "> This will launch $softwareProduct $version on $( $workstationIds.Count ) workstations:"
@@ -2116,6 +2119,7 @@ $remoteDeploymentCommands = @(
                         Write-Host $item.ErrorMessage
                     }
                 }
+                Write-Host
             }
             else {
                 Write-Host "An error occurred while launching $softwareProduct $version on the selected clients:"
