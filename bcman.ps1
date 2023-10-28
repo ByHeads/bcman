@@ -2065,7 +2065,60 @@ $remoteDeploymentCommands = @(
                 Write-Host
             }
             catch {
-                Write-Host "An error occurred while running $command on the given clients"
+                Write-Host "An error occurred while running $command on the selected clients:"
+                $result | Out-Host
+            }
+        }
+    }
+    @{
+        Command = "ManualLaunch"
+        Description = "Run an unscheduled launch of a client software version on selected connected client computers"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.ManualLaunch" = "POST"
+        }
+        Action = $mlaunch_c = {
+            $softwareProduct = Get-SoftwareProduct
+            if (!$softwareProduct) {
+                return
+            }
+            $version = Get-LaunchableSoftwareProductVersion $softwareProduct
+            [string[]]$workstationIds = Get-WorkstationIds "for the clients to launch $softwareProduct $version on"
+            if (!$workstationIds) {
+                return
+            }
+            $data = @{
+                Workstations = $workstationIds
+                Product = $softwareProduct
+                Version = $version
+            }
+            $body = $data | ConvertTo-Json
+            Write-Host "> This will launch $softwareProduct $version on $( $workstationIds.Count ) workstations:"
+            $workstationIds | Out-Host
+            Write-Host "> The operation will fail if $softwareProduct $version is not deployed on all workstations"
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
+                return
+            }
+            Write-Host "Launching..." -ForegroundColor Yellow
+            $result = irm "$bc/ManualLaunch" @postSettings -Body $body -ErrorAction SilentlyContinue -TimeoutSec 3600
+            if ($result.Status -eq "success" -and $result.DataCount -gt 0) {
+                Write-Host
+                Write-Host "RESULTS:" -ForegroundColor Yellow
+                Write-Host
+                foreach ($item in $result.Data) {
+                    $id = $item.Workstations[0]
+                    Write-Host "$id`: " -NoNewline
+                    if ($item.Launching) {
+                        Write-Host "Success" -ForegroundColor Green
+                    } else {
+                        Write-Host "Failed" -ForegroundColor Red -NoNewline
+                        Write-Host " – " -NoNewline
+                        Write-Host $item.ErrorMessage
+                    }
+                }
+            }
+            else {
+                Write-Host "An error occurred while launching $softwareProduct $version on the selected clients:"
                 $result | Out-Host
             }
         }
