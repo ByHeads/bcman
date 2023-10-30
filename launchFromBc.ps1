@@ -6,5 +6,5 @@
 $url = Read-Host "> Enter the URL of the Broadcaster" # Or hardcode it if appropriate
 $apiKey = Read-Host "> Enter the API key to use" -AsSecureString
 $scriptText = irm "$url/api/bcman" -Cr ([PSCredential]::new("any", $apiKey))
-$scriptBlock = [scriptblock]::Create($scriptText)
+$scriptBlock = [ScriptBlock]::Create($scriptText)
 icm $scriptBlock -Arg $url, $apiKey
