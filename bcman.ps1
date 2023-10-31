@@ -883,6 +883,19 @@ function Get-LaunchSchedule
         }
     }
 }
+function Update-Dependencies
+{
+    $body = @{ Install = $true } | ConvertTo-Json
+    Write-Host "> Downloading dependencies... " -NoNewline
+    $result = irm "$bc/DependencyUpdate" -Body $body @patchSettings
+    if ($result.Status -eq "success") {
+        Write-Host "Done!"
+    } else {
+        Write-Host
+        Write-Host "> An error occurred while updating dependencies" -ForegroundColor Red
+        $result | Out-Host
+    }
+}
 #endregion
 #region Status
 $getStatusCommands = @(
@@ -1738,6 +1751,15 @@ $remoteDeploymentCommands = @(
             Write-Host
             $bcUrl = Get-BroadcasterUrl-Ism
             $hosted = $bcUrl.Contains("heads-api.com") -or $bcUrl.Contains("heads-app.com")
+            if ($bcUrl -eq $bc -and (Has-Access "Broadcaster.Admin.DependencyStatus" "GET")) {
+                $status = (irm "$bc/DependencyStatus" @getSettingsRaw)[0]
+                if ($status.CurrentPolicy -eq "Local" -and !$status.HasPowerShell) {
+                    Write-Host "Warning: This Broadcaster uses the dependency source policy 'Local', but has no deployed dependencies" -ForegroundColor Yellow
+                    if (Yes "> Do you want to deploy dependencies now?") {
+                        Update-Dependencies
+                    }
+                }
+            }
             if ($hosted) {
                 Write-Host "The URI has the format of a Heads-hosted Broadcaster. If an error occurs during install, IP diagnostics will be included in the output" -ForegroundColor Yellow
             }
@@ -2445,14 +2467,7 @@ $modifyCommands = @(
                 $response = Read-Host "> Enter 'update' to update the dependencies or 'cancel' to cancel"
                 $response = $response.Trim().ToLower()
                 if ($response -ieq "update") {
-                    $body = @{ Install = $true } | ConvertTo-Json
-                    $result = irm "$bc/DependencyUpdate" -Body $body @patchSettings
-                    if ($result.Status -eq "success") {
-                        Write-Host "> Dependencies updated successfully" -ForegroundColor Green
-                    } else {
-                        Write-Host "> An error occurred while updating dependencies" -ForegroundColor Red
-                        $result | Out-Host
-                    }
+                    Update-Dependencies
                 }
             } else {
                 Write-Host "> Dependencies are up-to-date"
@@ -2612,7 +2627,7 @@ $otherCommands = @(
 $availabeResourcesMap = @{ }
 $availableResourcesJob = irm "$bc/AvailableResource" -Cr $credentials -AllowUnencryptedAuthentication -He @{ Accept = "application/json;raw=true" } &
 
-function Has-Access
+function Command-HasAccess
 {
     param($command)
     if ($command.Resources) {
@@ -2634,6 +2649,19 @@ function Has-Access
     return $true
 }
 
+function Has-Access
+{
+    param($resource, $method)
+    if ($availableResourcesJob -ne "completed") {
+        $list = Receive-Job $availableResourcesJob -Wait
+        foreach ($r in $list) {
+            $availabeResourcesMap[$r.Name] = $r.Methods
+        }
+    }
+    $granted = $availabeResourcesMap[$resource]
+    return $granted -contains $method.ToUpper()
+}
+
 function Write-Commands
 {
     param($label, $commands)
@@ -2642,7 +2670,7 @@ function Write-Commands
         if ($c.Hide) {
             continue;
         }
-        if (Has-Access $c) {
+        if (Command-HasAccess $c) {
             $list += [pscustomobject]@{
                 Command = $c.Command + "    "
                 Description = $c.Description
@@ -2683,7 +2711,7 @@ function Call($command)
     foreach ($c in $allCommands) {
         if ($c.Command -ieq $command) {
             $foundCommand = $true
-            if (Has-Access $foundCommand) {
+            if (Command-HasAccess $foundCommand) {
                 & $c.Action
             } else {
                 Write-Host "> You don't have permission to use command $resource" -ForegroundColor Red
