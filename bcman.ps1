@@ -2479,14 +2479,6 @@ $modifyCommands = @(
 #region Terminals
 $launchTerminalsCommands = @(
     @{
-        Command = "LaunchCommands"
-        Description = "Enters the Broadcaster LaunchCommands terminal"
-        Resources = @{
-            "Broadcaster.RemoteDeployment.LaunchCommands" = "GET"
-        }
-        Action = { Enter-Terminal "LaunchCommands" }
-    }
-    @{
         Command = "AccessToken"
         Description = "Enters the Broadcaster access token terminal"
         Resources = @{
@@ -2502,12 +2494,6 @@ $launchTerminalsCommands = @(
             "RESTable.Shell" = "GET"
         }
         Action = { Enter-Terminal "Shell" }
-    }
-    @{
-        Command = "Terminal"
-        Description = "Enters a Broadcaster terminal"
-        Hide = $true
-        Action = { Enter-Terminal (Get-Terminal) }
     }
 )
 #endregion
