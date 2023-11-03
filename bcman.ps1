@@ -375,6 +375,7 @@ function Enter-Terminal
         do {
             $input = Read-Host
             if ($input -ieq "exit") {
+                Write-Host "Returning to Broadcaster Manager" -ForegroundColor Yellow
                 return
             }
             $ct = New-Object Threading.CancellationToken($false)
@@ -389,7 +390,6 @@ function Enter-Terminal
         $ws.Dispose()
         $receiver.Stop()
         $receiver.Dispose()
-        Write-Host "Returning to Broadcaster Manager" -ForegroundColor Yellow
     }
 }
 function Get-Terminal
