@@ -1810,10 +1810,11 @@ $remoteDeploymentCommands = @(
             if ($hosted) {
                 $ip = "+'@'+`$(irm('icanhazip.com'))"
             }
+            $outUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
             Write-Host
             Write-Host "# Here's your install script! Run it in PowerShell as administrator on a client computer:"
             Write-Host
-            Write-Host "$arr|%{try{`$u='$bcUrl/'+`$_;irm(`$u)-He:@{Authorization='Bearer'+[char]0x0020+'$token'}|iex}catch{throw(`$u+'|'+`$(hostname)$ip+`$_)}};"
+            Write-Host "$arr|%{try{`$u='$outUrl'+'/api/'+`$_;irm(`$u)-He:@{Authorization='Bearer'+[char]0x0020+'$token'}|iex}catch{throw(`$u+'|'+`$(hostname)$ip+`$_)}};"
             Write-Host
             Write-Host "# End of script"
             Write-Host
