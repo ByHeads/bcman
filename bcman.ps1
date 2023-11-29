@@ -1681,7 +1681,7 @@ $dashboardCommands = @(
                 Format-Table | Out-Host
 
                 $prevSort = $sortMember
-                switch (Get-DashboardInput s c f w l t p r a n) {
+                switch (Get-DashboardInput s c f w i l t p r a n) {
                     quit { return }
                     refresh {
                         $prevSort = $null
