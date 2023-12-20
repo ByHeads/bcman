@@ -1996,7 +1996,9 @@ $remoteDeploymentCommands = @(
             [string[]]$workstationIds = Get-WorkstationIds
             Write-Host "> Selected these workstations for reset:"
             $workstationIds | Out-Host
+            $closeDayJournal = $false
             if (Yes "> Should we close relevant day journals before resetting these workstations?") {
+                $closeDayJournal = $true
                 $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
                 $posUser = $posUser.Trim()
                 if ($posUser -ieq "cancel") {
