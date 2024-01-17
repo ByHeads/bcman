@@ -35,6 +35,9 @@ if ($PSVersionTable.PSVersion.Major -lt $requiredPsVersion) {
         $env:path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     }
 }
+
+Write-Host "THIS IS A PRE-RELEASE OF BCMAN. DON'T USE WITH PRODUCTION BROADCASTERS!" -ForegroundColor Yellow
+
 # if in windows
 if ($IsWindows -eq $null) {
     Start-Process pwsh -ArgumentList "-c `"irm raw.githubusercontent.com/byheads/bcman/next/bcman.ps1 | iex`""
