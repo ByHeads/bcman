@@ -36,6 +36,7 @@ if ($PSVersionTable.PSVersion.Major -lt $requiredPsVersion) {
     }
 }
 
+Write-Host
 Write-Host "THIS IS A PRE-RELEASE OF BCMAN. DON'T USE WITH PRODUCTION BROADCASTERS!" -ForegroundColor Yellow
 
 # if in windows
