@@ -1988,35 +1988,21 @@ $remoteDeploymentCommands = @(
     }
     @{
         Command = "Reset"
-        Description = "Resets one or more POS server databases, optionally also closing their day journals"
+        Description = "Resets one or more POS server databases"
         Resources = @{
             "Broadcaster.RemoteDeployment.Reset" = "POST"
         }
         Action = {
             [string[]]$workstationIds = Get-WorkstationIds
-            Write-Host "> Selected these workstations for reset:"
-            $workstationIds | Out-Host
-            $closeDayJournal = $false
-            if (Yes "> Should we close relevant day journals before resetting these workstations?") {
-                $closeDayJournal = $true
-                $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
-                $posUser = $posUser.Trim()
-                if ($posUser -ieq "cancel") {
-                    return
-                }
-                $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
-                if ($posPassword -ieq "cancel") {
-                    return
-                }
-            }
             Write-Host "> This will reset the POS-Server databases on $( $workstationIds.Length ) workstations:"
             $workstationIds | Out-Host
-            if (!(Yes "> Do you want to proceed?")) {
+            Write-Host "> `e[93mWarning:`e[0m Day journals must now be manually closed using `e[93mCloseDayJournal`e[0m before running reset"
+            if (!(Yes "> Do you want to proceed? This will reset all selected POS-Server databases and cannot be undone")) {
                 Write-Host "Aborted"
                 return
             }
             Write-Host "Running reset (this could take a while)" -ForegroundColor Yellow
-            $body = @{ Workstations = $workstationIds; SkipDayJournal = !$closeDayJournal; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
+            $body = @{ Workstations = $workstationIds; } | ConvertTo-Json
             $result = irm "$bc/Reset" -Body $body @postSettings -TimeoutSec 3600 -ErrorAction SilentlyContinue
             try {
                 Write-RemoteResult $result
@@ -2024,6 +2010,44 @@ $remoteDeploymentCommands = @(
             }
             catch {
                 Write-Host "An error occurred while running reset"
+                $result | Out-Host
+            }
+        }
+    }
+    @{
+        Command = "CloseDayJournal"
+        Description = "Closes the day journals of one or more POS server clients"
+        Resources = @{
+            "Broadcaster.RemoteDeployment.CloseDayJournal" = "POST"
+        }
+        Action = {
+            [string[]]$workstationIds = Get-WorkstationIds
+            Write-Host "> Selected these workstations to close day journals for:"
+            $workstationIds | Out-Host
+            $posUser = Read-Host "> Enter the user name to call the POS-server APIs with when closing the day journals or 'cancel' to cancel"
+            $posUser = $posUser.Trim()
+            if ($posUser -ieq "cancel") {
+                return
+            }
+            $posPassword = Read-Host "> Enter that user's password or 'cancel' to cancel" -MaskInput
+            if ($posPassword -ieq "cancel") {
+                return
+            }
+            Write-Host "> This will close the day journals on $( $workstationIds.Length ) workstations:"
+            $workstationIds | Out-Host
+            if (!(Yes "> Do you want to proceed?")) {
+                Write-Host "Aborted"
+                return
+            }
+            Write-Host "Closing day journals (this could take a while)" -ForegroundColor Yellow
+            $body = @{ Workstations = $workstationIds; PosUser = $posUser; PosPassword = $posPassword; } | ConvertTo-Json
+            $result = irm "$bc/CloseDayJournal" -Body $body @postSettings -TimeoutSec 3600 -ErrorAction SilentlyContinue
+            try {
+                Write-RemoteResult $result
+                Write-Host
+            }
+            catch {
+                Write-Host "An error occurred while closing day journals"
                 $result | Out-Host
             }
         }
@@ -2522,7 +2546,7 @@ $otherCommands = @(
         Description = "Perfect for various celebrations"
         Action = {
             if ($global:fireworks) {
-                Write-Host "Less celebration, more motivation! You've had your fun..."
+                Write-Host "Less celebration, more concentration! You've had your fun..."
                 Start-Sleep 1
                 return
             }
