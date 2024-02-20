@@ -2298,7 +2298,7 @@ $modifyCommands = @(
                         Write-Host "No new launch was scheduled. There is likely an earlier launch with the same or a higher version."
                         & $launch_c
                     } else {
-                        Write-Host "A launch was successfully scheduled"
+                        Write-Host "A launch was successfully scheduled" -ForegroundColor Green
                         & $launch_c
                     }
                 }
