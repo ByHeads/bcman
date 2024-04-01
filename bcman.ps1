@@ -1,4 +1,4 @@
-param($injectedUrl, $injectedKey)
+param($injectedUrl, $injectedKey, $initialCommand)
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     return "Broadcaster Manager requires PowerShell 7 or later"
 }
@@ -360,7 +360,7 @@ function Enter-Terminal
             $result = ""
             do {
                 $receiveTask = $ws.ReceiveAsync($buffer, $ct)
-                while ((-not$receiveTask.IsCompleted) -and ($ws.State -eq [Net.WebSockets.WebSocketState]::Open)) {
+                while ((-not $receiveTask.IsCompleted) -and ($ws.State -eq [Net.WebSockets.WebSocketState]::Open)) {
                     [Threading.Thread]::Sleep(10)
                 }
                 $result += [Text.Encoding]::UTF8.GetString($buffer, 0, $receiveTask.Result.Count)
@@ -2747,6 +2747,9 @@ Call "Status"
 Write-HelpInfo
 Write-Host
 
+if ($initialCommand) {
+    Call $initialCommand.Trim().ToLower()
+}
 while ($true) {
     $input = Read-Host "> Enter a command"
     if ($input -eq "") {
