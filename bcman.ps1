@@ -1056,12 +1056,13 @@ $getStatusCommands = @(
             "Broadcaster.Admin.ReceiverLog" = "GET"
         }
         Action = {
-            irm "$bc/ReceiverLog/_/select=workstationid,modules.machine.osstatus" @getSettingsRaw | % {
+            $response = irm "$bc/ReceiverLog/_/select=workstationid,modules.machine.osstatus" @getSettingsRaw
+            $response | % {
                 [pscustomobject]@{
                     WorkstationId = $_.WorkstationId
-                    Architecture = $_.modules.machine.osstatus.architecture
-                    ".NET version" = $_.modules.machine.osstatus.netfx
-                    OS = $_.modules.machine.osstatus.description
+                    Architecture = $_."modules.machine.osstatus".architecture ?? "???"
+                    ".NET version" = $_."modules.machine.osstatus".netfx ?? "???"
+                    OS = $_."modules.machine.osstatus".description ?? "???"
                 }
             } | Sort-Object -Property "WorkstationId" | % { Pad $_ } | Format-Table | Out-Host
         }
