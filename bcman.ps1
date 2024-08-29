@@ -1237,6 +1237,7 @@ $getStatusCommands = @(
 $dashboardCommands = @(
     @{
         Command = "UpdateDashboard"
+        Alias = "ud"
         Description = "Presents a live dashboard of the software update status of clients"
         Resources = @{
             "Broadcaster.Admin.ReceiverLog" = "GET"
@@ -1427,6 +1428,7 @@ $dashboardCommands = @(
     @{
         Command = "SoftwareDashboard"
         Description = "Presents a live dashboard of the installed software on clients"
+        Alias = "sd"
         Resources = @{
             "Broadcaster.Admin.ReceiverLog" = "GET"
             "Broadcaster.Deployment.LaunchSchedule" = "GET"
@@ -1586,6 +1588,7 @@ $dashboardCommands = @(
     @{
         Command = "ReplicationDashboard"
         Description = "Presents a live dashboard of the replication status of clients"
+        Alias = "rd"
         Resources = @{
             "Broadcaster.Admin.ReplicationState" = "GET"
             "Broadcaster.Deployment.LaunchSchedule" = "GET"
@@ -2702,8 +2705,9 @@ function Write-Commands
             continue;
         }
         if (Command-HasAccess $c) {
+            $aliases = $c.Alias ? ", " + $c.Alias : ""
             $list += [pscustomobject]@{
-                Command = $c.Command + "    "
+                Command = $c.Command + $aliases + "    "
                 Description = $c.Description
             }
         }
@@ -2740,7 +2744,7 @@ function Call($command)
 {
     $foundCommand = $false
     foreach ($c in $allCommands) {
-        if ($c.Command -ieq $command) {
+        if ($c.Command -ieq $command -or $c.Alias -ieq $command) {
             $foundCommand = $true
             if (Command-HasAccess $foundCommand) {
                 & $c.Action
