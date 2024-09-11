@@ -1165,6 +1165,7 @@ $getStatusCommands = @(
     @{
         Command = "Notifications"
         Description = "Prints details about current Broadcaster notifications"
+        Alias = "not"
         Resources = @{
             "Broadcaster.Admin.NotificationLog" = "GET", "DELETE"
         }
