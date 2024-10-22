@@ -602,6 +602,9 @@ function Get-RetailVersion
         }
         "cancel" { return $null }
         default {
+            if ( $input.StartsWith("@")) {
+                return $input.Substring(1)
+            }
             if ($input -notmatch '^\d{2}\.\d{1,3}$') {
                 $revisionPattern = '^\d{2}\.\d{1,3}\.\d{1,4}\.[1-9]\d*$'
                 if ($input -notmatch $revisionPattern) {
