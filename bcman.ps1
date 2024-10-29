@@ -277,7 +277,7 @@ function Write-RemoteResult
 function Write-DashboardHeader
 {
     param($name, $context, $filterActive)
-    Write-Host "$name" -ForegroundColor Yellow -NoNewline
+    Write-Host "`e[1;93m$name`e[0m" -NoNewline
     if ($context) {
         Write-Host " for " -NoNewline
         Write-Host $context -ForegroundColor Yellow -NoNewline
@@ -288,9 +288,9 @@ function Write-DashboardHeader
     Write-Host " to refresh, " -NoNewline
     Write-Host "Ctrl+C" -ForegroundColor Yellow -NoNewline
     Write-Host " to quit, " -NoNewline
-    Write-Host "`e[1m`e[92mI`e[32mnitial`e[0m to sort (again to toggle)" -NoNewline
+    Write-Host "`e[1m`e[97mI`e[92mnitial`e[0m to sort (again to toggle)" -NoNewline
     if ($filterActive -ne $null) {
-        Write-Host ", `e[1m`e[92mF`e[32m`e[0m toggles " -NoNewline
+        Write-Host ", `e[1m`e[97mF`e[92m`e[0m toggles " -NoNewline
         if ($filterActive) { Write-Host "`e[1m`e[93mPOS filter`e[0m" }
         else { Write-Host "POS filter" }
     } else {
@@ -1265,10 +1265,10 @@ $dashboardCommands = @(
             $descending = $true
             $onlyPos = $false
 
-            $upToDate = "`e[32mUp to date`e[0m"
-            $updating = "`e[35mUpdating`e[0m"
+            $upToDate = "`e[92mUp to date`e[0m"
+            $updating = "`e[95mUpdating`e[0m"
             $restarting = "`e[96mRestarting`e[0m"
-            $offline = "`e[31mOffline`e[0m"
+            $offline = "`e[91mOffline`e[0m"
             $waitingToDownload = "`e[93mWaiting to download`e[0m"
             $downloading = "`e[96mDownloading`e[0m"
 
@@ -1288,20 +1288,20 @@ $dashboardCommands = @(
 
             while ($true) {
                 $members = @{
-                    Status = "`e[92mS`e[32mtatus"
-                    Kind = "`e[92mK`e[32mind"
-                    WorkstationId = "Workstation`e[92m I`e[32mD"
-                    LastActive = "`e[92mL`e[32mast active (UTC)"
-                    Version = "`e[92mV`e[32mersion"
-                    "Download %" = "`e[92mD`e[32mownload %"
+                    Status = "`e[97mS`e[92mtatus"
+                    Kind = "`e[97mK`e[92mind"
+                    WorkstationId = "Workstation`e[97m I`e[92mD"
+                    LastActive = "`e[97mL`e[92mast active (UTC)"
+                    Version = "`e[97mV`e[92mersion"
+                    "Download %" = "`e[97mD`e[92mownload %"
                 }
                 if ($onlyPos) {
-                    $members.Kind = "`e[93mK`e[33mind`e[32m"
+                    $members.Kind = "`e[97mK`e[93mind`e[92m"
                 }
                 if ($descending) {
-                    $postfix = "`e[35m▼`e[32m"
+                    $postfix = "`e[95m▼`e[92m"
                 } else {
-                    $postfix = "`e[35m▲`e[32m"
+                    $postfix = "`e[95m▲`e[92m"
                 }
                 $data = Get-Batch $body
                 $currentVersion = [System.Version]$data.CurrentVersions[0]."$softwareProduct.Version"
@@ -1371,16 +1371,16 @@ $dashboardCommands = @(
                     S $target LastActive $_.LastActive
                     $version = $_.Modules."$softwareProduct".CurrentVersion
                     if ($status -eq $upToDate) {
-                        $version = "`e[32m$version`e[0m"
+                        $version = "`e[92m$version`e[0m"
                     } else {
-                        $version = "`e[31m$version`e[0m"
+                        $version = "`e[91m$version`e[0m"
                     }
                     S $target Version $version
                     if ($downloadPercent -eq 100) {
                         $downloadPercent = "`e[92m$downloadPercent`e[0m"
                     }
                     elseif ($downloadPercent) {
-                        $downloadPercent = "`e[33m$downloadPercent`e[0m"
+                        $downloadPercent = "`e[93m$downloadPercent`e[0m"
                     }
                     S $target "Download %" $downloadPercent
                     return [pscustomobject]$target
@@ -1453,28 +1453,28 @@ $dashboardCommands = @(
             while ($true) {
 
                 $members = @{
-                    Status = "`e[92mS`e[32mtatus"
-                    Kind = "`e[92mK`e[32mind"
-                    WorkstationId = "Workstation`e[92m I`e[32mD"
-                    LastActive = "`e[92mL`e[32mast active (UTC)"
-                    Receiver = "`e[92mR`e[32meceiver"
-                    WpfClient = "`e[92mW`e[32mPF Client"
-                    PosServer = "`e[92mP`e[32mOS Server"
-                    CustomerServiceApplication = "`e[92mC`e[32mustomer Service Application"
+                    Status = "`e[97mS`e[92mtatus"
+                    Kind = "`e[97mK`e[92mind"
+                    WorkstationId = "Workstation`e[97m I`e[92mD"
+                    LastActive = "`e[97mL`e[92mast active (UTC)"
+                    Receiver = "`e[97mR`e[92meceiver"
+                    WpfClient = "`e[97mW`e[92mPF Client"
+                    PosServer = "`e[97mP`e[92mOS Server"
+                    CustomerServiceApplication = "`e[97mC`e[92mustomer Service Application"
                 }
                 if ($onlyPos) {
-                    $members.Kind = "`e[93mK`e[33mind`e[32m"
+                    $members.Kind = "`e[97mK`e[93mind`e[92m"
                 }
                 if ($descending) {
-                    $postfix = "`e[35m▼`e[32m"
+                    $postfix = "`e[95m▼`e[92m"
                 } else {
-                    $postfix = "`e[35m▲`e[32m"
+                    $postfix = "`e[95m▲`e[92m"
                 }
                 $data = Get-Batch $body
                 $currentVersions = $data.CurrentVersions[0]
                 $listData = $data.ReceiverLog | % {
-                    if ($_.IsConnected) { $status = "`e[32mOnline`e[0m" }
-                    else { $status = "`e[31mOffline`e[0m" }
+                    if ($_.IsConnected) { $status = "`e[92mOnline`e[0m" }
+                    else { $status = "`e[91mOffline`e[0m" }
                     $target = [ordered]@{ }
                     function S()
                     {
@@ -1492,20 +1492,20 @@ $dashboardCommands = @(
                         if ($_.IsConnected) {
                             if ($_.Modules.$name.IsRunning) { $post = " `e[1m`e[92m`u{2713}`e[0m" }
                             else { $post = " `e[1m`e[91m`u{2717}`e[0m" }
-                        } else { $post = " `e[1m`e[37m`u{2300}`e[0m" }
+                        } else { $post = " `e[1m`e[97m`u{2300}`e[0m" }
                         $versionPart = $version
                         if (($version.Length % 2) -ne 0) {
                             $versionPart = "$versionPart "
                         }
                         $versionPart = $versionPart.PadRight($versionPart.Length + 1)
                         if ($currentVersions.$name.Version -eq $version) {
-                            return "`e[32m$versionPart`e[0m$post"
+                            return "`e[92m$versionPart`e[0m$post"
                         }
                         elseif ($currentVersions.$name.Version -lt $version) {
-                            return "`e[35m$versionPart`e[0m$post"
+                            return "`e[95m$versionPart`e[0m$post"
                         }
                         else {
-                            return "`e[31m$versionPart`e[0m$post"
+                            return "`e[91m$versionPart`e[0m$post"
                         }
                     }
                     $kind = ""
@@ -1610,12 +1610,12 @@ $dashboardCommands = @(
             $sortMember = "Status"
             $descending = $true
 
-            $upToDate = "`e[32mUp to date`e[0m"
+            $upToDate = "`e[92mUp to date`e[0m"
             $replicating = "`e[92mReplicating`e[0m"
             $awaitUpdate = "`e[93mAwait update`e[0m"
             $awaitInit = "`e[96mAwait init`e[0m"
-            $blocked = "`e[35mBlocked`e[0m"
-            $obsolete = "`e[31mObsolete`e[0m"
+            $blocked = "`e[95mBlocked`e[0m"
+            $obsolete = "`e[91mObsolete`e[0m"
 
             function Sort-Order()
             {
@@ -1633,21 +1633,21 @@ $dashboardCommands = @(
 
             while ($true) {
                 $members = @{
-                    Status = "`e[92mS`e[32mtatus"
-                    Connection = "`e[92mC`e[32monnection"
-                    "Filter" = "`e[92mF`e[32milter"
-                    WorkstationId = "Workstation`e[92m I`e[32mD"
-                    LastReceived = "`e[92mL`e[32mast received (UTC)"
-                    LastActive = "Last ac`e[92mt`e[32mive (UTC)"
-                    PosServerVersion = "`e[92mP`e[32mOS Server version"
-                    ReplicationVersion = "`e[92mR`e[32meplication version"
-                    Applicable = "`e[92mA`e[32mpplicable"
-                    NonApplicable = "`e[92mN`e[32mon-applicable"
+                    Status = "`e[97mS`e[92mtatus"
+                    Connection = "`e[97mC`e[92monnection"
+                    "Filter" = "`e[97mF`e[92milter"
+                    WorkstationId = "Workstation`e[97m I`e[92mD"
+                    LastReceived = "`e[97mL`e[92mast received (UTC)"
+                    LastActive = "Last ac`e[97mt`e[92mive (UTC)"
+                    PosServerVersion = "`e[97mP`e[92mOS Server version"
+                    ReplicationVersion = "`e[97mR`e[92meplication version"
+                    Applicable = "`e[97mA`e[92mpplicable"
+                    NonApplicable = "`e[97mN`e[92mon-applicable"
                 }
                 if ($descending) {
-                    $postfix = "`e[35m▼`e[32m"
+                    $postfix = "`e[95m▼`e[92m"
                 } else {
-                    $postfix = "`e[35m▲`e[32m"
+                    $postfix = "`e[95m▲`e[92m"
                 }
                 $data = Get-Batch $body
                 $currentPosVersion = $data.CurrentVersions[0].PosServer.Version
@@ -1681,19 +1681,19 @@ $dashboardCommands = @(
                     }
                     S $target Status $status
                     $connection = ""
-                    if ($_.IsConnected) { $connection = "`e[32mOnline`e[0m" }
-                    else { $connection = "`e[31mOffline`e[0m" }
+                    if ($_.IsConnected) { $connection = "`e[92mOnline`e[0m" }
+                    else { $connection = "`e[91mOffline`e[0m" }
                     S $target Connection $connection
                     $filter = ""
-                    if ($_.IncludedInFilter) { $filter = "`e[32m`u{2713}`e[0m" }
-                    else { $filter = "`e[31m`u{2717}`e[0m" }
+                    if ($_.IncludedInFilter) { $filter = "`e[92m`u{2713}`e[0m" }
+                    else { $filter = "`e[91m`u{2717}`e[0m" }
                     S $target "Filter" $filter
                     S $target WorkstationId $_.WorkstationId
                     S $target LastReceived $_.LastReceived
                     S $target LastActive $_.LastActive
                     $posServerVersion = $_.PosServerVersion
                     if ($posServerVersion -eq $currentPosVersion) {
-                        $posServerVersion = "`e[32m$posServerVersion`e[0m"
+                        $posServerVersion = "`e[92m$posServerVersion`e[0m"
                     }
                     else {
                         $posServerVersion = "`e[93m$posServerVersion`e[0m"
