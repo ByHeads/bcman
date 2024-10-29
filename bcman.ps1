@@ -1,4 +1,5 @@
 param($injectedUrl, $injectedKey, $initialCommand)
+$OutputEncoding = [System.Text.Encoding]::UTF8
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     return "Broadcaster Manager requires PowerShell 7 or later"
 }
