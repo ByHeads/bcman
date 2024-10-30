@@ -995,7 +995,6 @@ $getStatusCommands = @(
             Write-Host "For clients active since: `e[92m$cutoff`e[0m"
             $spec = [pscustomobject]@{
                 ReceiverCount = "REPORT /ReceiverLog/LastActive>$startDateISO"
-                ConnectedReceiverCount = "REPORT /ReceiverLog/LastActive>$startDateISO&IsConnected=true"
                 WpfClientNoPOSCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.PosServer.IsInstalled=false&Modules.WpfClient.IsInstalled=true"
                 WpfClientWithPOSCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.PosServer.IsInstalled=true&Modules.WpfClient.IsInstalled=true"
                 CustomerServiceApplicationCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.CustomerServiceApplication.IsInstalled=true"
