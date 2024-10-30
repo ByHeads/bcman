@@ -982,6 +982,22 @@ $getStatusCommands = @(
         }
     }
     @{
+        Command = "ClientReport"
+        Description = "Prints a overview of the Broadcaster's clients"
+        Action = {
+            Write-Host "Broadcaster: "$bc.Split("/api")[0]
+            $spec = [pscustomobject]@{
+                ReceiverCount = "REPORT /ReceiverLog"
+                ConnectedReceiverCount = "REPORT /ReceiverLog/IsConnected=true"
+                WpfClientNoPOSCount = "REPORT /ReceiverLog/Modules.PosServer.IsInstalled=false&Modules.WpfClient.IsInstalled=true"
+                WpfClientWithPOSCount = "REPORT /ReceiverLog/Modules.PosServer.IsInstalled=true&Modules.WpfClient.IsInstalled=true"
+                CustomerServiceApplicationCount = "REPORT /ReceiverLog/Modules.CustomerServiceApplication.IsInstalled=true"
+            }
+            $results = Get-Batch $spec
+            $results | Out-Host
+        }
+    }
+    @{
         Command = "ReceiverStatus"
         Description = "Prints the status for all connected Receivers"
         Resources = @{
