@@ -779,6 +779,7 @@ function Get-RuntimeId
 }
 function Get-DateTime
 {
+    param($prompt)
     $input = Read-Host "> Enter date and time for the launch, press enter for now, 'examples' for examples or 'cancel' to cancel"
     $input = $input.Trim()
     if ($input -ieq "") {
@@ -985,13 +986,19 @@ $getStatusCommands = @(
         Command = "ClientReport"
         Description = "Prints a overview of the Broadcaster's clients"
         Action = {
-            Write-Host "Broadcaster: "$bc.Split("/api")[0]
+            $cutoff = Read-Host "> Enter a start date to gather data from (e.g. 2024-01-01), or enter to include all"
+            if ("" -eq $cutoff) { $startDateString = "1970-01-01"; $cutoff = "beginning of time" } else { $startDateString = $cutoff }
+            $startDate = Get-Date -AsUTC $startDateString
+            $startDateISO = $startDate.ToString("O")
+            Write-Host
+            Write-Host "Broadcaster:"$bc.Split("/api")[0]
+            Write-Host "For clients active since: `e[92m$cutoff`e[0m"
             $spec = [pscustomobject]@{
-                ReceiverCount = "REPORT /ReceiverLog"
-                ConnectedReceiverCount = "REPORT /ReceiverLog/IsConnected=true"
-                WpfClientNoPOSCount = "REPORT /ReceiverLog/Modules.PosServer.IsInstalled=false&Modules.WpfClient.IsInstalled=true"
-                WpfClientWithPOSCount = "REPORT /ReceiverLog/Modules.PosServer.IsInstalled=true&Modules.WpfClient.IsInstalled=true"
-                CustomerServiceApplicationCount = "REPORT /ReceiverLog/Modules.CustomerServiceApplication.IsInstalled=true"
+                ReceiverCount = "REPORT /ReceiverLog/LastActive>$startDateISO"
+                ConnectedReceiverCount = "REPORT /ReceiverLog/LastActive>$startDateISO&IsConnected=true"
+                WpfClientNoPOSCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.PosServer.IsInstalled=false&Modules.WpfClient.IsInstalled=true"
+                WpfClientWithPOSCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.PosServer.IsInstalled=true&Modules.WpfClient.IsInstalled=true"
+                CustomerServiceApplicationCount = "REPORT /ReceiverLog/LastActive>$startDateISO&Modules.CustomerServiceApplication.IsInstalled=true"
             }
             $results = Get-Batch $spec
             $results | Out-Host
