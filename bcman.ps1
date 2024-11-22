@@ -1335,6 +1335,7 @@ $dashboardCommands = @(
                 }
                 $listData = $data.ReceiverLog | % {
                     $status = ""
+                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
                     $downloadPercent = $null
                     if ($_.Modules."$softwareProduct".CurrentVersion -eq $currentVersion) {
                         if ($softwareProduct -eq "PosServer") {
@@ -1351,7 +1352,7 @@ $dashboardCommands = @(
                         $downloadPercent = 100
                         $status = $updating
                     }
-                    elseif (!$_.IsConnected) {
+                    elseif (!$_.IsConnected -and !$isRecent) {
                         $status = $offline
                     }
                     else {
@@ -1495,7 +1496,8 @@ $dashboardCommands = @(
                 $data = Get-Batch $body
                 $currentVersions = $data.CurrentVersions[0]
                 $listData = $data.ReceiverLog | % {
-                    if ($_.IsConnected) { $status = "`e[92mOnline`e[0m" }
+                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
+                    if ($_.IsConnected -or $isRecent) { $status = "`e[92mOnline`e[0m" }
                     else { $status = "`e[91mOffline`e[0m" }
                     $target = [ordered]@{ }
                     function S()
@@ -1703,7 +1705,8 @@ $dashboardCommands = @(
                     }
                     S $target Status $status
                     $connection = ""
-                    if ($_.IsConnected) { $connection = "`e[92mOnline`e[0m" }
+                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
+                    if ($_.IsConnected -or $isRecent) { $connection = "`e[92mOnline`e[0m" }
                     else { $connection = "`e[91mOffline`e[0m" }
                     S $target Connection $connection
                     $filter = ""
