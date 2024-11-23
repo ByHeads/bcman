@@ -487,45 +487,45 @@ function Get-WorkstationGroupMembers
     param($group)
     return (irm "$bc/WorkstationGroups/_/select=$group" @getSettingsRaw)[0].$group
 }
-function Add-WorkstationGroupMember
+function Add-WorkstationGroupMembers
 {
     param($group)
-    $workstationId = Get-WorkstationId
-    if (!$workstationId) {
+    $workstationIds = Get-WorkstationIds
+    if (!$workstationIds) {
         return
     }
     [string[]]$currentMembers = Get-WorkstationGroupMembers $group
     if (!$currentMembers) {
         $currentMembers = @()
     }
-    $currentMembers += $workstationId
+    $currentMembers += $workstationIds
     $body = @{ $group = $currentMembers } | ConvertTo-Json
     $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
     if ($result.Status -eq "success") {
-        Write-Host "$workstationId was added to group $group"
+        $count = $workstationIds.Count
+        Write-Host "$count workstation(s) were added to group $group"
     }
-    Add-WorkstationGroupMember $group
 }
 function Remove-WorkstationGroupMember
 {
     param($group)
-    $workstationId = Get-WorkstationId
-    if (!$workstationId) {
+    $toRemove = Get-WorkstationIds
+    if (!$toRemove) {
         return
     }
-    $currentMembers = Get-WorkstationGroupMembers $group
+    [string[]]$currentMembers = Get-WorkstationGroupMembers $group
     if ($currentMembers) {
         $newMembers = @()
         foreach ($member in $currentMembers) {
-            if ($member -ine $workstationId) {
+            if ($toRemove -notcontains $member) {
                 $newMembers += $member
             }
         }
         $body = @{ $group = $newMembers } | ConvertTo-Json
         $result = irm "$bc/WorkStationGroups" -Body $body @patchSettings
     }
-    Write-Host "$workstationId was removed from the group $group"
-    Add-WorkstationGroupMember $group
+    $count = $toRemove.Count
+    Write-Host "$count workstation(s) were removed from the group $group"
 }
 function Manage-WorkstationGroup
 {
@@ -555,7 +555,7 @@ function Manage-WorkstationGroup
             Manage-WorkstationGroup $group
         }
         "add" {
-            Add-WorkstationGroupMember $group
+            Add-WorkstationGroupMembers $group
             Manage-WorkstationGroup $group
         }
         default { Manage-WorkstationGroup $group }
