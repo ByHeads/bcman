@@ -905,6 +905,7 @@ function Update-Dependencies
     }
 }
 #endregion
+
 #region Status
 $getStatusCommands = @(
     @{
@@ -2246,6 +2247,39 @@ $remoteDeploymentCommands = @(
             Write-Host
         }
     }
+    @{
+        Command = "DownloadFile"
+        Resources = @{
+            "Broadcaster.Admin.ReceiverHeadsTextFile" = "GET"
+        }
+        Description = "Downloads a text file from within the 'C:\ProgramData\Heads' directory on a client computer"
+        Action = {
+            $path = Read-Host "> Enter a file path to the file to download or 'cancel' to cancel. The path must begin with C:\ProgramData\Heads"
+            if ($path -ieq "cancel") {
+                return
+            }
+            if ($path -notmatch "^C:\\ProgramData\\Heads\\") {
+                Write-Host "Invalid path. The path must begin with C:\ProgramData\Heads"
+                return
+            }
+            $workstationId = Get-WorkstationId "for the client to download the file from"
+            $downloads = "";
+            if ($IsWindows) {
+                $downloads = (New-Object -ComObject Shell.Application).Namespace('shell:Downloads').Self.Path
+            } else {
+                $downloads = "~/Downloads"
+            }
+            $path = [System.Uri]::EscapeDataString($path)
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            $response = iwr "$bc/ReceiverHeadsTextFile/WorkstationId=$workstationId&FilePath=$path" @getSettings -PassThru -OutFile $tempFile -AllowUnencryptedAuthentication
+            $contentDisposition = $response.Headers."Content-Disposition"
+            $fileName = $contentDisposition.SubString(21)
+            $outputFile = Join-Path $downloads $filename
+            echo "> Downloaded file to '$outputFile'"
+            Move-Item -Path $tempFile -Destination $outputFile -Force
+        }
+    }
+
 )
 #endregion
 #region Modify
