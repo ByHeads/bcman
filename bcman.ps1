@@ -1170,8 +1170,13 @@ $getStatusCommands = @(
             else {
                 Write-Host
                 $isRecent = $response.LastActive -gt (Get-Date).AddMinutes(-2);
+
+                Write-Host "LA: $($response.LastActive.ToString("O") )"
+                Write-Host "Two minutes ago: $((Get-Date).AddMinutes(-2).ToString("O") )"
+                Write-Host "Two minutes ago UTC: $((Get-Date -AsUTC).AddMinutes(-2).ToString("O") )"
+                
                 Write-Host $response.LastActive.GetType().FullName
-                Write-Host "IsRecent: $isRecent" 
+                Write-Host "IsRecent: $isRecent"
                 $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                     Write-Host ($_.Name + ":") -ForegroundColor Yellow
                     Write-Host
