@@ -1169,13 +1169,13 @@ $getStatusCommands = @(
             }
             else {
                 Write-Host
+                Write-Host "IsRecent" $response.LastActive -gt (Get-Date).AddMinutes(-2)
                 $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                     Write-Host ($_.Name + ":") -ForegroundColor Yellow
                     Write-Host
                     $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
                     $ht = @{ }
                     $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
-                    $ht.IsRecent = $ht.LastActive -gt (Get-Date).AddMinutes(-2)
                     if (($ht.Count -eq 0) -and ($_.Name -eq "Downloads")) {
                         Write-Host "No download tasks"
                     }
