@@ -1169,7 +1169,8 @@ $getStatusCommands = @(
             }
             else {
                 Write-Host
-                Write-Host "IsRecent" $response.LastActive -gt (Get-Date).AddMinutes(-2)
+                $isRecent = $response.LastActive -gt (Get-Date).AddMinutes(-2);
+                Write-Host "IsRecent: $isRecent" 
                 $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                     Write-Host ($_.Name + ":") -ForegroundColor Yellow
                     Write-Host
