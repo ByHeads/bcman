@@ -1157,7 +1157,7 @@ $getStatusCommands = @(
             }
             $widLower = $workstationId.ToLower()
             $widUpper = $workstationId.ToUpper()
-            $response = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper/select=Modules" @getSettingsRaw | Select-Object -first 1
+            $response = irm "$bc/ReceiverLog/WorkstationId>=$widLower&WorkstationId<=$widUpper/select=LastActive,Modules" @getSettingsRaw | Select-Object -first 1
             if (!$response) {
                 Write-Host "Found no Receiver with workstation ID $workstationId"
                 & $receiverDetails_c
