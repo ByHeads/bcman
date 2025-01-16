@@ -1169,14 +1169,6 @@ $getStatusCommands = @(
             }
             else {
                 Write-Host
-                $isRecent = $response.LastActive -gt (Get-Date).AddMinutes(-2);
-
-                Write-Host "LA: $($response.LastActive.ToString("O") )"
-                Write-Host "Two minutes ago: $((Get-Date).AddMinutes(-2).ToString("O") )"
-                Write-Host "Two minutes ago UTC: $((Get-Date -AsUTC).AddMinutes(-2).ToString("O") )"
-                
-                Write-Host $response.LastActive.GetType().FullName
-                Write-Host "IsRecent: $isRecent"
                 $response.Modules.PSObject.Properties | Sort-Object -Property "Name" | ForEach-Object {
                     Write-Host ($_.Name + ":") -ForegroundColor Yellow
                     Write-Host
@@ -1344,7 +1336,7 @@ $dashboardCommands = @(
                 }
                 $listData = $data.ReceiverLog | % {
                     $status = ""
-                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
+                    $isRecent = $_.LastActive -gt (Get-Date -AsUTC).AddMinutes(-2)
                     $downloadPercent = $null
                     if ($_.Modules."$softwareProduct".CurrentVersion -eq $currentVersion) {
                         if ($softwareProduct -eq "PosServer") {
@@ -1505,7 +1497,7 @@ $dashboardCommands = @(
                 $data = Get-Batch $body
                 $currentVersions = $data.CurrentVersions[0]
                 $listData = $data.ReceiverLog | % {
-                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
+                    $isRecent = $_.LastActive -gt (Get-Date -AsUTC).AddMinutes(-2)
                     if ($_.IsConnected -or $isRecent) { $status = "`e[92mOnline`e[0m" }
                     else { $status = "`e[91mOffline`e[0m" }
                     $target = [ordered]@{ }
