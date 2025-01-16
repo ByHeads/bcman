@@ -1175,6 +1175,7 @@ $getStatusCommands = @(
                     $value = $_.Value | select -ExcludeProperty "@Type", "ProductName"
                     $ht = @{ }
                     $value.PSObject.Properties | Foreach { $ht[$_.Name] = $_.Value }
+                    $ht.IsRecent = $ht.LastActive -gt (Get-Date).AddMinutes(-2)
                     if (($ht.Count -eq 0) -and ($_.Name -eq "Downloads")) {
                         Write-Host "No download tasks"
                     }
@@ -1706,7 +1707,7 @@ $dashboardCommands = @(
                     }
                     S $target Status $status
                     $connection = ""
-                    $isRecent = $_.LastActive -gt (Get-Date).AddMinutes(-2)
+                    $isRecent = $_.LastActive -gt (Get-Date -AsUTC).AddMinutes(-2)
                     if ($_.IsConnected -or $isRecent) { $connection = "`e[92mOnline`e[0m" }
                     else { $connection = "`e[91mOffline`e[0m" }
                     S $target Connection $connection
