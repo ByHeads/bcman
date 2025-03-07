@@ -1514,7 +1514,7 @@ $dashboardCommands = @(
                         if (!$version) { return "" }
                         $post = ""
                         $fixedLength = 20
-                        if ($_.IsConnected) {
+                        if ($_.IsConnected -or $isRecent) {
                             if ($_.Modules.$name.IsRunning) { $post = " `e[1m`e[92m`u{2713}`e[0m" }
                             else { $post = " `e[1m`e[91m`u{2717}`e[0m" }
                         } else { $post = " `e[1m`e[97m`u{2300}`e[0m" }
