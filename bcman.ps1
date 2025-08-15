@@ -1867,6 +1867,9 @@ $remoteDeploymentCommands = @(
             }
             $outUrl = $bcUrl.Substring(0, ($bcUrl.Length - 4))
             Write-Host
+            Write-Host "Always test scripts before sending them to customers!" -ForegroundColor Yellow
+            Write-Host
+            Sleep 3
             Write-Host "# Here's your install script! Run it in PowerShell as administrator on a client computer:"
             Write-Host
             Write-Host "$arr|%{try{`$u='$outUrl'+'/api/'+`$_;irm(`$u)-He:@{Authorization='Bearer'+[char]0x0020+'$token'}|iex}catch{throw(`$u+'|'+`$(hostname)$ip+`$_)}};"
